@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bidding Network Graph</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body { margin: 0; font-family: 'Sarabun', sans-serif; background-color: #f8f9fa; }
+        #chart-container { width: 100vw; height: 100vh; }
+        .node { stroke: #fff; stroke-width: 1.5px; cursor: pointer; }
+        .link { stroke: #999; stroke-opacity: 0.6; }
+        .label { font-size: 12px; pointer-events: none; }
+        /* สไตล์ของ Tooltip */
+        #tooltip {
+            position: absolute; text-align: center; padding: 8px;
+            font: 12px sans-serif; background: white; border: 1px solid #ccc;
+            border-radius: 4px; pointer-events: none; opacity: 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="tooltip"></div>
+    <div id="chart-container"></div>
+
+    <script>
+        // 1. เตรียมข้อมูลจำลอง (คุณสามารถเปลี่ยนตรงนี้ให้ดึงข้อมูลจาก API ของคุณได้)
+        const data = {
+            nodes: [
+                { id: "บริษัท A", group: 1 }, { id: "บริษัท B", group: 2 },
+                { id: "บริษัท C", group: 1 }, { id: "บริษัท D", group: 2 },
+                { id: "บริษัท E", group: 3 }
+            ],
+            links: [
+                { source: "บริษัท A", target: "บริษัท B", weight: 5 }, // แข่งกัน 5 ครั้ง
+                { source: "บริษัท A", target: "บริษัท C", weight: 2 },
+                { source: "บริษัท B", target: "บริษัท D", weight: 8 }, // แข่งกันบ่อยมาก
+                { source: "บริษัท C", target: "บริษัท E", weight: 1 },
+                { source: "บริษัท D", target: "บริษัท A", weight: 3 }
+            ]
+        };
+
+        // 2. ตั้งค่าขนาดของกราฟ
+        const width = window.innerWidth;
+        const height = window.innerHeight;
+
+        const svg = d3.select("#chart-container").append("svg")
+            .attr("width", "100%")
+            .attr("height", "100%")
+            .call(d3.zoom().on("zoom", (event) => { // ใส่ฟังก์ชัน Zoom
+                svgGroup.attr("transform", event.transform);
+            }));
+
+        const svgGroup = svg.append("g");
+        const tooltip = d3.select("#tooltip");
+
+        // 3. สร้างระบบฟิสิกส์ (Force Simulation) ให้จุดกระจายตัว
+        const simulation = d3.forceSimulation(data.nodes)
+            .force("link", d3.forceLink(data.links).id(d => d.id).distance(150))
+            .force("charge", d3.forceManyBody().strength(-400))
+            .force("center", d3.forceCenter(width / 2, height / 2));
+
+        // 4. วาดเส้นเชื่อม (Edges)
+        const link = svgGroup.append("g")
+            .attr("class", "links")
+            .selectAll("line")
+            .data(data.links)
+            .enter().append("line")
+            .attr("class", "link")
+            .attr("stroke-width", d => Math.sqrt(d.weight) * 2); // ความหนาตามจำนวนครั้ง
+
+        // 5. วาดจุดบริษัท (Nodes)
+        const node = svgGroup.append("g")
+            .attr("class", "nodes")
+            .selectAll("circle")
+            .data(data.nodes)
+            .enter().append("circle")
+            .attr("class", "node")
+            .attr("r", 15)
+            .attr("fill", "#0079c1") // สีฟ้าสไตล์ ArcGIS
+            .call(d3.drag() // ทำให้ลากได้
+                .on("start", dragstarted)
+                .on("drag", dragged)
+                .on("end", dragended));
+
+        // 6. ใส่ชื่อบริษัท (Labels)
+        const label = svgGroup.append("g")
+            .selectAll("text")
+            .data(data.nodes)
+            .enter().append("text")
+            .attr("class", "label")
+            .attr("dy", -20)
+            .attr("dx", -15)
+            .text(d => d.id);
+
+        // 7. เพิ่ม Event ชี้แล้วแสดง Tooltip
+        node.on("mouseover", function(event, d) {
+            tooltip.transition().duration(200).style("opacity", .9);
+            tooltip.html("<b>" + d.id + "</b>")
+                .style("left", (event.pageX + 10) + "px")
+                .style("top", (event.pageY - 28) + "px");
+            d3.select(this).attr("fill", "#ffaa00"); // เปลี่ยนสีตอนชี้
+        }).on("mouseout", function(d) {
+            tooltip.transition().duration(500).style("opacity", 0);
+            d3.select(this).attr("fill", "#0079c1");
+        });
+
+        // อัปเดตตำแหน่งทุก Frame
+        simulation.on("tick", () => {
+            link.attr("x1", d => d.source.x).attr("y1", d => d.source.y)
+                .attr("x2", d => d.target.x).attr("y2", d => d.target.y);
+            node.attr("cx", d => d.x).attr("cy", d => d.y);
+            label.attr("x", d => d.x).attr("y", d => d.y);
+        });
+
+        // ฟังก์ชันลาก (Drag)
+        function dragstarted(event, d) {
+            if (!event.active) simulation.alphaTarget(0.3).restart();
+            d.fx = d.x; d.fy = d.y;
+        }
+        function dragged(event, d) {
+            d.fx = event.x; d.fy = event.y;
+        }
+        function dragended(event, d) {
+            if (!event.active) simulation.alphaTarget(0);
+            d.fx = null; d.fy = null;
+        }
+    </script>
+</body>
+</html>
