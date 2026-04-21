@@ -1,132 +1,4969 @@
 <!DOCTYPE html>
 <html lang="th">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bidding Network Graph</title>
-    <script src="https://d3js.org/d3.v7.min.js"></script>
-    <style>
-        body { margin: 0; font-family: 'Sarabun', sans-serif; background-color: #f8f9fa; }
-        #chart-container { width: 100vw; height: 100vh; }
-        .node { stroke: #fff; stroke-width: 1.5px; cursor: pointer; }
-        .link { stroke: #999; stroke-opacity: 0.6; }
-        .label { font-size: 12px; pointer-events: none; }
-        /* สไตล์ของ Tooltip */
-        #tooltip {
-            position: absolute; text-align: center; padding: 8px;
-            font: 12px sans-serif; background: white; border: 1px solid #ccc;
-            border-radius: 4px; pointer-events: none; opacity: 0;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-    </style>
+<meta charset="UTF-8">
+<title>Network Analysis: Fraud Detection</title>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;700&display=swap" rel="stylesheet">
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+body { margin: 0; background-color: #0f111a; color: #e2e8f0; font-family: 'Sarabun', sans-serif; overflow: hidden; }
+#viz { width: 100vw; height: 100vh; cursor: grab; }
+#viz:active { cursor: grabbing; }
+.tooltip { position: absolute; background: rgba(15, 23, 42, 0.95); border: 1px solid #334155; padding: 18px; border-radius: 8px; color: #f8fafc; pointer-events: none; opacity: 0; font-size: 14px; box-shadow: 0 15px 30px rgba(0,0,0,0.8); z-index: 10; backdrop-filter: blur(8px); max-width: 350px; line-height: 1.5; }
+.tooltip strong { color: #38bdf8; font-size: 16px; display: block; margin-bottom: 10px; border-bottom: 1px solid #334155; padding-bottom: 8px; }
+.badge { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; margin-right: 5px; }
+.badge-winner { background: #10b981; color: #022c22; }
+.badge-cover { background: #e11d48; color: white; }
+#panel { position: absolute; top: 20px; left: 20px; background: rgba(30, 41, 59, 0.85); padding: 25px; border-radius: 12px; border: 1px solid #334155; backdrop-filter: blur(10px); box-shadow: 0 10px 25px rgba(0,0,0,0.5); pointer-events: auto; z-index: 100; }
+h1 { margin: 0 0 15px 0; font-size: 22px; color: #f8fafc; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
+.legend-item { display: flex; align-items: center; margin-top: 12px; font-size: 14px; color: #cbd5e1; }
+.legend-color { width: 16px; height: 16px; border-radius: 50%; margin-right: 12px; box-shadow: 0 0 10px rgba(255,255,255,0.2); }
+.control-group { margin-top: 20px; padding-top: 15px; border-top: 1px solid #334155; }
+input[type="text"] { width: 100%; padding: 10px; background: #0f111a; border: 1px solid #334155; color: #f8fafc; border-radius: 6px; margin-bottom: 10px; box-sizing: border-box; }
+.btn-action { background: #38bdf8; color: #0f111a; border: none; padding: 8px 12px; border-radius: 6px; cursor: pointer; font-weight: bold; margin-right: 5px; margin-bottom: 5px; }
+.btn-action:hover { background: #0284c7; }
+.btn-secondary { background: #475569; color: #f8fafc; }
+.btn-secondary:hover { background: #334155; }
+</style>
 </head>
 <body>
+<div id="panel">
+<h1>ระบบวิเคราะห์เครือข่ายความสัมพันธ์</h1>
+<div class="legend-item"><div class="legend-color" style="background: #10b981;"></div> ผู้ชนะประมูล</div>
+<div class="legend-item"><div class="legend-color" style="background: #e11d48;"></div> ผู้เสนอราคาคู่เทียบ</div>
+<div class="legend-item"><div class="legend-color" style="background: #64748b; height: 3px; border-radius: 0;"></div> ความถี่ในการแข่งขัน (ความหนาของเส้น)</div>
+<div class="control-group">
+<input type="text" id="searchInput" placeholder="พิมพ์ชื่อบริษัทเพื่อค้นหา...">
+<button id="btnSearch" class="btn-action">ค้นหา</button>
+<button id="btnTop5" class="btn-action" style="background:#fcd34d;" hidden></button>
+<button id="btnReset" class="btn-action btn-secondary" hidden></button>
+</div>
+</div>
+<div id="tooltip" class="tooltip"></div>
+<div id="viz"></div>
+<script>
+const graphData = {
+  "nodes": [
+    {
+      "id": "Consortium Srichonlathorn & Grandline",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 114375000,
+      "dominant_agency": "เทศบาลตำบลกะรน"
+    },
+    {
+      "id": "บริษัท วรประดิษฐ์ จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท แอ็ดวานซ์อินฟอร์เมชั่นเทคโนโลยี จำกัด (มหาชน)",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 10,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท อาร์ เอส เอส 2016 จำกัด (มหาชน)",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท ต.พีระกฤช จำกัด",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 249000000,
+      "dominant_agency": "มหาวิทยาลัยราชภัฏศรีสะเกษ"
+    },
+    {
+      "id": "กิจการร่วมค้า ไทยพัฒนา กรุ๊ป",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "กิจการร่วมค้า AIC",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท วิรุฬห์ แอนด์ เกวนเนส จำกัด",
+      "type": "Winner",
+      "total_projects_won": 3,
+      "total_bids_participated": 4,
+      "total_budget_won": 1775128000,
+      "dominant_agency": "กรมชลประทาน"
+    },
+    {
+      "id": "บริษัท เค-แมน ออโต้เซอร์วิส จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "ห้างหุ้นส่วนจำกัด เค.ที.เอ็ม.999",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "กลุ่ม Consortium ETEM & PKSP",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 428418875.04,
+      "dominant_agency": "การไฟฟ้าส่วนภูมิภาค"
+    },
+    {
+      "id": "บริษัท สิริมงคลเพาเวอร์เคเบิล จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 3,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท เบญจกาย เอ็นเตอร์ไพรส์ จำกัด",
+      "type": "Winner",
+      "total_projects_won": 2,
+      "total_bids_participated": 4,
+      "total_budget_won": 1567919620.8,
+      "dominant_agency": "การไฟฟ้าส่วนภูมิภาค"
+    },
+    {
+      "id": "บริษัท เอส เทค ซีวิล แอนด์ คอนสตรัคชั่น จำกัด",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 629354800,
+      "dominant_agency": "กรมชลประทาน"
+    },
+    {
+      "id": "บริษัท กรุงธนเอนยิเนียร์ จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 5,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "ห้างหุ้นส่วนจำกัด น้ำก่ำก่อสร้าง",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 4,
+      "total_budget_won": 678500000,
+      "dominant_agency": "กรมชลประทาน"
+    },
+    {
+      "id": "ห้างหุ้นส่วนจำกัด โชคสุวัฒนา",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 3,
+      "total_budget_won": 539974181.76,
+      "dominant_agency": "การไฟฟ้าส่วนภูมิภาค"
+    },
+    {
+      "id": "ห้างหุ้นส่วนจำกัด สยามอุดรเทรดดิ้ง",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 2,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท สยามราชธานี จำกัด (มหาชน)",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 3,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "กิจการค้าร่วม บริษัท สยามราชธานี จำกัด (มหาชน) และ บริษัท เพาเวอร์ เทคโนโลยี่ ดีเวลลอปเมนท์ จำกัด",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 905657510.16,
+      "dominant_agency": "การไฟฟ้าส่วนภูมิภาค"
+    },
+    {
+      "id": "บริษัท พี.เอ็ม.ซี.คอนแทร็คเตอร์ จำกัด",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 564472028.64,
+      "dominant_agency": "การไฟฟ้าส่วนภูมิภาค"
+    },
+    {
+      "id": "บริษัท อีทีอี เมเนจเมนท์ จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "ห้างหุ้นส่วนจำกัด พิจิตสุวรรณ วิศวกร",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 2,
+      "total_budget_won": 582251000,
+      "dominant_agency": "กรมชลประทาน"
+    },
+    {
+      "id": "ห้างหุ้นส่วนจำกัด ชินวรยะลาก่อสร้าง",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท สุพรีม ดิสทิบิวชั่น จำกัด (มหาชน)",
+      "type": "Winner",
+      "total_projects_won": 16,
+      "total_bids_participated": 33,
+      "total_budget_won": 4374538990,
+      "dominant_agency": "สำนักงานคณะกรรมการการศึกษาขั้นพื้นฐาน"
+    },
+    {
+      "id": "บริษัท เมโทรโปรเฟสชั่นแนลโปรดักส์ จำกัด",
+      "type": "Winner",
+      "total_projects_won": 4,
+      "total_bids_participated": 11,
+      "total_budget_won": 568223397,
+      "dominant_agency": "สำนักงานคณะกรรมการการศึกษาขั้นพื้นฐาน"
+    },
+    {
+      "id": "บริษัท กันต์กนิษฐ์ ก่อสร้าง จำกัด",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 3,
+      "total_budget_won": 152935000,
+      "dominant_agency": "มหาวิทยาลัยเทคโนโลยีราชมงคลรัตนโกสินทร์"
+    },
+    {
+      "id": "บริษัท ศิวกรการช่าง จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท ประดิษฐ์ธนานุรักษ์ จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "ห้างหุ้นส่วนจำกัด ธงไทยหันคา",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 590905500,
+      "dominant_agency": "กรมชลประทาน"
+    },
+    {
+      "id": "บริษัท นนทบุรี เอ็นจิเนีย จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 2,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท อรลักษณ์สิงห์บุรี (1994) จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท อุทัยไชโย จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "ห้างหุ้นส่วนจำกัด ฮิวเมติค",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 104957400,
+      "dominant_agency": "มหาวิทยาลัยพะเยา"
+    },
+    {
+      "id": "บริษัท ดีดี ควอลิตี้ โปรดักท์ จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท โชว์ ดีไซน์ จำกัด",
+      "type": "Winner",
+      "total_projects_won": 2,
+      "total_bids_participated": 2,
+      "total_budget_won": 383000000,
+      "dominant_agency": "องค์การบริหารส่วนตำบลราชาเทวะ"
+    },
+    {
+      "id": "บริษัท พอชซิทีฟ จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 2,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "กิจการค้าร่วมเอสวีดับบลิว",
+      "type": "Winner",
+      "total_projects_won": 3,
+      "total_bids_participated": 5,
+      "total_budget_won": 675798087.15,
+      "dominant_agency": "สำนักงานคณะกรรมการการศึกษาขั้นพื้นฐาน"
+    },
+    {
+      "id": "บริษัท เอสวีโอเอ จำกัด (มหาชน)",
+      "type": "Winner",
+      "total_projects_won": 11,
+      "total_bids_participated": 16,
+      "total_budget_won": 2539736918,
+      "dominant_agency": "สำนักงานคณะกรรมการการศึกษาขั้นพื้นฐาน"
+    },
+    {
+      "id": "บริษัท ไวร์เออ แอนด์ ไวร์เลส จำกัด",
+      "type": "Winner",
+      "total_projects_won": 4,
+      "total_bids_participated": 7,
+      "total_budget_won": 999310298.8,
+      "dominant_agency": "สำนักงานคณะกรรมการการศึกษาขั้นพื้นฐาน"
+    },
+    {
+      "id": "บริษัท มิชชั่น อินโฟ เทคโนโลยี  จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท ดิอาคิเท็คส์ แอนด์ เทิร์นคีย์ จำกัด",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 2,
+      "total_budget_won": 924000000,
+      "dominant_agency": "กรมวิชาการเกษตร"
+    },
+    {
+      "id": "บริษัท อาคาร 33 จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 2,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "กิจการร่วมค้า อาร์อาร์ แอนด์ ทีเอส",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 572048600,
+      "dominant_agency": "กรมชลประทาน"
+    },
+    {
+      "id": "ห้างหุ้นส่วนจำกัด พินิจอุดรก่อสร้าง",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 3,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "กิจการร่วมค้า วีเค - บีเค ก่อสร้าง",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 127890000,
+      "dominant_agency": "เทศบาลตำบลศรีสุนทร"
+    },
+    {
+      "id": "บริษัท ภรณ์เพียร จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "ห้างหุ้นส่วนจำกัด พี.เค.2001",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท ซีเอ โอ คล๊อก จำกัด",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 127500000,
+      "dominant_agency": "เทศบาลตำบลบางปู"
+    },
+    {
+      "id": "บริษัท ไร้ท์แมน จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท แปลน โมทิฟ จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท ทูแมกซ์ จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท ไทยทราโฟ แมนูแฟคเจอริ่ง จำกัด",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 3,
+      "total_budget_won": 616620670,
+      "dominant_agency": "การไฟฟ้านครหลวง"
+    },
+    {
+      "id": "บริษัท เจริญชัยหม้อแปลงไฟฟ้า จำกัด",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 3,
+      "total_budget_won": 640298700,
+      "dominant_agency": "การไฟฟ้านครหลวง"
+    },
+    {
+      "id": "บริษัท เอกรัฐวิศวกรรม จำกัด (มหาชน)",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 3,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท คิวทีซี เอนเนอร์ยี่ จำกัด (มหาชน)",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 2,
+      "total_budget_won": 821658350,
+      "dominant_agency": "การไฟฟ้านครหลวง"
+    },
+    {
+      "id": "บริษัท พรีไซซ อีเลคตริค แมนูแฟคเจอริ่ง จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 2,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท วิสต้า ทราโฟ จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 2,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท เซจ อินเวนชั่น จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท ไทยแมกซ์เวลอิเลคทริค  จำกัด",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 2,
+      "total_budget_won": 1314008792,
+      "dominant_agency": "การไฟฟ้านครหลวง"
+    },
+    {
+      "id": "บริษัท ชัยเจริญไมตรี จำกัด",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 4,
+      "total_budget_won": 749500000,
+      "dominant_agency": "กรมชลประทาน"
+    },
+    {
+      "id": "บริษัท เอสวีเค เทคโนโลยี จำกัด",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 108060900,
+      "dominant_agency": "สถาบันเทคโนโลยีป้องกันประเทศ"
+    },
+    {
+      "id": "บริษัท เอฟเวอร์เรสท์ ซัพพลาย จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท เอสแอลซี  โพรเทค จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท เอส.พี.อีเล็คทริค อินดัสตรี จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท เอเซียทราโฟ จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท ทริปเปิ้ล ที เอ็นเท็ค จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท โชคชัยวัฒนาก่อสร้าง จำกัด",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 121200000,
+      "dominant_agency": "มหาวิทยาลัยราชภัฏเชียงใหม่"
+    },
+    {
+      "id": "บริษัท กรีน ฟอเรสท์ เอ็นจิเนียริ่ง จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "ห้างหุ้นส่วนจำกัด พายัพคอนสตรัคชั่น",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "เอ็นพีซี",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "กิจการร่วมค้า ทีดี นครศรีธรรมราช",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 1073500000,
+      "dominant_agency": "กรมชลประทาน"
+    },
+    {
+      "id": "บริษัท ซิโน-ไทย เอ็นจีเนียริ่ง แอนด์ คอนสตรัคชั่น จำกัด (มหาชน)",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 3,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "กลุ่มนิติบุคคลร่วมทำงาน บริษัท เอ็นเทอร์ไพร้ซวายด์ โซลูชั่นส์ จำกัด และ บริษัท ชีต้าร์-พีเทรีส จอยท์เวนเจอร์ จำกัด",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 937995423.59,
+      "dominant_agency": "บริษัท ท่าอากาศยานไทย จำกัด (มหาชน)"
+    },
+    {
+      "id": "บริษัท ที.ที.เอส. คอร์ปอเรชั่น จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท แอโร่ คอร์ปอเรชั่น จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท บุรีรัมย์พนาสิทธิ์ จำกัด",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 929500000,
+      "dominant_agency": "กรมชลประทาน"
+    },
+    {
+      "id": "บริษัท บุญสหะการสร้าง จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 2,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท ยิ่งเจริญก่อสร้างบุรีรัมย์ จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท เทิร์นคีย์ คอมมูนิเคชั่น เซอร์วิส จำกัด (มหาชน)",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 317790000,
+      "dominant_agency": "บริษัท ท่าอากาศยานไทย จำกัด (มหาชน)"
+    },
+    {
+      "id": "บริษัท ยูไนเต็ด เทเลคอม เซลส์ แอนด์ เซอร์วิสเซส จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท อินฟอร์เมชั่น แอนด์ คอมมิวนิเคชั่น เน็ทเวิร์คส จำกัด (มหาชน)",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 2,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท ดับเบิลยู เค ซี  จำกัด",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 3,
+      "total_budget_won": 899980000,
+      "dominant_agency": "กรมชลประทาน"
+    },
+    {
+      "id": "ห้างหุ้นส่วนจำกัด อุบลรุ่งเรืองกลการ",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท ไทยวัฒน์วิศวการทาง จำกัด",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 2,
+      "total_budget_won": 803570000,
+      "dominant_agency": "กรมชลประทาน"
+    },
+    {
+      "id": "ห้างหุ้นส่วนจำกัด ไทยเจริญศรีสะเกษ",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 2,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท อินโนพาวเวอร์ จำกัด",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 119448000,
+      "dominant_agency": "องค์การบริหารส่วนจังหวัดกาญจนบุรี"
+    },
+    {
+      "id": "บริษัท ดาวรุ่ง ทราเวล จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัทมหาชนจำกัด บริษัท อินฟอร์เมชั่น แอนด์ คอมมิวนิเคชั่น เน็ทเวิร์คส จำกัด (มหาชน)(สัญญากิจการค้าร่วม)",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 0,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "เอสไอ คอนซอเตียม",
+      "type": "Winner",
+      "total_projects_won": 2,
+      "total_bids_participated": 7,
+      "total_budget_won": 729120298.5,
+      "dominant_agency": "สำนักงานคณะกรรมการการศึกษาขั้นพื้นฐาน"
+    },
+    {
+      "id": "บริษัท เจแอนด์ซี เซอร์วิส กรุ๊ป จำกัด",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 302447819.78,
+      "dominant_agency": "องค์การบริหารส่วนตำบลมาบยางพร"
+    },
+    {
+      "id": "บริษัท เอิกพงษ์ จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 2,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท เอ็ม.แซท.ดี. คาร์เซ็นเตอร์ จำกัด",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 175759500,
+      "dominant_agency": "กรมราชทัณฑ์"
+    },
+    {
+      "id": "บริษัท ไทย เพรสทิจ เร้นท์ เอ คาร์ จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัทจำกัด บริษัท ยิบอินซอย จำกัด(สัญญากิจการค้าร่วม)",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 0,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท ฟอร์ท คอร์ปอเรชั่น จำกัด (มหาชน)",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 2,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท วิชั่น แอนด์ ซีเคียวริตี้ ซีสเต็ม จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "สกายไฮและยิบอินซอย",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท ศักดิ์ทองพูน จำกัด",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 216700000,
+      "dominant_agency": "มหาวิทยาลัยแม่โจ้"
+    },
+    {
+      "id": "บริษัท ฟิวเจอร์ คอนสตรัคชั่น จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท วรรณรัช พัฒนา จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 2,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท เอเออี เอ็นจิเนียริ่ง (ประเทศไทย)  จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "ห้างหุ้นส่วนจำกัด แสวงฟ้าก่อสร้าง",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท ศรพญาหิรัญ จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "ห้างหุ้นส่วนจำกัด ทัศนีย์การช่าง",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "กิจการร่วมค้า พัฒนา กรุ๊ป",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "กิจการร่วมค้า ซีเอ็มบีเค คอนสตรัคชั่น",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท ไทยวอเตอร์ เอ็นจิเนียริ่ง จำกัด",
+      "type": "Winner",
+      "total_projects_won": 2,
+      "total_bids_participated": 2,
+      "total_budget_won": 238040000,
+      "dominant_agency": "กรมทรัพยากรน้ำบาดาล"
+    },
+    {
+      "id": "บริษัท รุ่งวิจิตรการช่าง จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท ซิโนพาวเวอร์ จำกัด",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 106304476.41,
+      "dominant_agency": "มหาวิทยาลัยอุบลราชธานี"
+    },
+    {
+      "id": "บริษัท เอสซีจี คลีนเนอร์ยี่ จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท ยูวีบีจีพี คลีน เอ็นเนอร์ยี่ จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท ปตท. น้ำมันและการค้าปลีก จำกัด (มหาชน)",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท โรลลิ่ง คอนเซปต์ อินโนเวชั่น จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท กิจการร่วมค้า ซี เอส ซี จำกัด",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 1748788300,
+      "dominant_agency": "กรมราชทัณฑ์"
+    },
+    {
+      "id": "บริษัท ล็อกซเล่ย์ จำกัด (มหาชน)",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 2,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "ห้างหุ้นส่วนจำกัด ส.ฤดีทรงธรรมร่วมกิจ และ บริษัท คอนสตรัคชั่น เอ็กคลูซีฟเนส จำกัด",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 2,
+      "total_budget_won": 1643980000,
+      "dominant_agency": "กรมราชทัณฑ์"
+    },
+    {
+      "id": "กิจการร่วมค้า ที แอนด์ ที (2025)",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 546967600,
+      "dominant_agency": "กรมชลประทาน"
+    },
+    {
+      "id": "บริษัท โซลูชั่น เอ็กซ์เพิร์ท คอร์เปอเรชั่น จำกัด",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 130170000,
+      "dominant_agency": "สำนักงานตำรวจแห่งชาติ"
+    },
+    {
+      "id": "บริษัท ฟิวชั่น อินโนเวทีฟ จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท นครชัยแอร์ จำกัด",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 14905000000,
+      "dominant_agency": "องค์การขนส่งมวลชนกรุงเทพ"
+    },
+    {
+      "id": "กิจการค้าร่วม ทียู",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท โปรเฟสชั่นแนล เซอร์วิส แอนด์ โซลูชั่น จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 2,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท เอเซียเมท จำกัด",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 631300000,
+      "dominant_agency": "กรมอุตุนิยมวิทยา"
+    },
+    {
+      "id": "บริษัท จีโนแมทช์ จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท ไนท แอคเซ็ส จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท คอมมิวนิเคชั่น แอนด์ ซิสเต็มส์ โซลูชั่น จำกัด (มหาชน)",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "ห้างหุ้นส่วนจำกัด เจ วี ซี ก่อสร้าง",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 102800000,
+      "dominant_agency": "กรมทรัพยากรน้ำ"
+    },
+    {
+      "id": "บริษัท โกศลสถาปัตย์ จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "ห้างหุ้นส่วนจำกัด โชคสุชินคอนสตรัคชั่น",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท ไอเอสโอ เอ็นจิเนียริ่ง จำกัด",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 3,
+      "total_budget_won": 324400000,
+      "dominant_agency": "มหาวิทยาลัยเชียงใหม่"
+    },
+    {
+      "id": "บริษัท เอ็นแอล ดีเวลลอปเมนต์ จำกัด (มหาชน)",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 3,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท เอ็นพี เอ็นจิเนียริ่ง คอร์ปอเรชั่น จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท เอ็มโอที  สมาร์ท โซลูชั่นส์ จำกัด",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 798500000,
+      "dominant_agency": "กองบัญชาการกองทัพไทย"
+    },
+    {
+      "id": "บริษัท ย่งไทยรับเบอร์ จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท ฟิโก้ เทคโนโลยี แอนด์ เอ็นจิเนียริ่ง จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท บาราน (ไทยแลนด์)  จำกัด",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 141755555.55,
+      "dominant_agency": "มหาวิทยาลัยแม่ฟ้าหลวง"
+    },
+    {
+      "id": "บริษัท ทีฆทัศน์ ดีเวลลอปเมนท์ จำกัด (มหาชน)",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "กิจการร่วมค้า ชุมราษฎร์ วิศวกรรม SIRI",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 5,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัทมหาชนจำกัด บริษัท ไลท์อัพ โทเทิล โซลูชั่น จำกัด (มหาชน)(สัญญากิจการค้าร่วม)",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 0,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "แอลทีเอสวี คอนซอร์เทียม",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "สหกรณ์การเกษตรเวียงป่าเป้า จำกัด",
+      "type": "Winner",
+      "total_projects_won": 2,
+      "total_bids_participated": 2,
+      "total_budget_won": 211761728.26,
+      "dominant_agency": "กรมราชทัณฑ์"
+    },
+    {
+      "id": "องค์การคลังสินค้า",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 2,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "องค์การตลาด กระทรวงมหาดไทย",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 2,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท ตั้งเจริญ จำกัด",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 658672800,
+      "dominant_agency": "กรมชลประทาน"
+    },
+    {
+      "id": "บริษัท นิยมพานิช จำกัด",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 121749426,
+      "dominant_agency": "สำนักงานคณะกรรมการการศึกษาขั้นพื้นฐาน"
+    },
+    {
+      "id": "บริษัท พุทธเตชะ จำกัด",
+      "type": "Winner",
+      "total_projects_won": 2,
+      "total_bids_participated": 2,
+      "total_budget_won": 668780000,
+      "dominant_agency": "มหาวิทยาลัยเทคโนโลยีราชมงคลอีสาน"
+    },
+    {
+      "id": "กิจการร่วมค้าเอสเคทีอินเทค-ซีทีซี",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 122500000,
+      "dominant_agency": "องค์การบริหารส่วนตำบลบางบ่อ"
+    },
+    {
+      "id": "บริษัท เพาเวอร์ไลน์ เอ็นจิเนียริ่ง จำกัด (มหาชน)",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 895000000,
+      "dominant_agency": "มหาวิทยาลัยเชียงใหม่"
+    },
+    {
+      "id": "บริษัท เฟิร์ส เทคโนโลยี่ จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "ห้างหุ้นส่วนจำกัด แทคติคอล โซลูชั่น",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 134250000,
+      "dominant_agency": "สำนักงานตำรวจแห่งชาติ"
+    },
+    {
+      "id": "บริษัท ฟิกซ์เทค จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท อาร์ทีแอล อีควิปเม้นท์ จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท แอพเวิร์คส์  จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท อุดมศักดิ์ เชียงใหม่ จำกัด",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 649500000,
+      "dominant_agency": "กรมทางหลวง"
+    },
+    {
+      "id": "บริษัท อสิตากิจ จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท เชียงรายแลนด์ แอสโซซิเอทส์ จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท เบลสสกาย คอนเนคชั่น จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท ซีเอ็นเอ็น การโยธา จำกัด",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 155000000,
+      "dominant_agency": "สำนักงานปลัดกระทรวงสาธารณสุข"
+    },
+    {
+      "id": "บริษัท เอส เอส ไอ ดีเวลลอปเม้นท์ จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท ไร้ท์ทันเน็ลลิ่ง จำกัด (มหาชน)",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 2798000000,
+      "dominant_agency": "กรมชลประทาน"
+    },
+    {
+      "id": "บริษัท หรรษนันท์ พร็อบเพอร์ตี้ จำกัด",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 372397999,
+      "dominant_agency": "สำนักงานคณะกรรมการการศึกษาขั้นพื้นฐาน"
+    },
+    {
+      "id": "กิจการร่วมค้า เอ็ม.อี.ซี.ไทยอีสาน",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 3,
+      "total_budget_won": 283200000,
+      "dominant_agency": "สำนักงานปลัดกระทรวงสาธารณสุข"
+    },
+    {
+      "id": "กิจการค้าร่วม เอชแอนด์ที",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 656877450,
+      "dominant_agency": "สำนักงานคณะกรรมการการศึกษาขั้นพื้นฐาน"
+    },
+    {
+      "id": "บริษัท อินเตอร์ลิ้งค์ เทเลคอม จำกัด (มหาชน)",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "กิจการค้าร่วม เอสแอนด์พี",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 1407033333.62,
+      "dominant_agency": "สำนักงานคณะกรรมการการศึกษาขั้นพื้นฐาน"
+    },
+    {
+      "id": "บริษัท กอริลลา เทคโนโลยี (ประเทศไทย) จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "กิจการค้าร่วมล็อกซเล่ย์-อินเตอร์ลิ้งค์คอนโซเตียม",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท เวิลด์ กรุ๊ป เอ็นจิเนียริ่ง จำกัด",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 109000000,
+      "dominant_agency": "เทศบาลตำบลบางพระ"
+    },
+    {
+      "id": "บริษัท กรีนทั้มบ์ จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "ห้างหุ้นส่วนจำกัด เจริญชัยชลบุรีก่อสร้าง",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท ซุ่นเฮงก่อสร้าง จำกัด",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 137790000,
+      "dominant_agency": "มหาวิทยาลัยทักษิณ"
+    },
+    {
+      "id": "ห้างหุ้นส่วนจำกัด หาดใหญ่สรรพกิจก่อสร้าง",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 2,
+      "total_budget_won": 149900000,
+      "dominant_agency": "มหาวิทยาลัยราชภัฏสงขลา"
+    },
+    {
+      "id": "บริษัท เพิ่มพูนวิศวกรรม จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "\"บีจีซี\",\"143702078.80",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "กิจการร่วมค้า GLG",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 385990000,
+      "dominant_agency": "องค์การบริหารส่วนจังหวัดสมุทรปราการ"
+    },
+    {
+      "id": "บริษัท เอ็ม.ซี.คอนสตรัคชั่น (1979) จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท อิตาเลียนไทย ดีเวล๊อปเมนต์ จำกัด (มหาชน)",
+      "type": "Winner",
+      "total_projects_won": 2,
+      "total_bids_participated": 2,
+      "total_budget_won": 4115899741.87,
+      "dominant_agency": "การไฟฟ้าฝ่ายผลิตแห่งประเทศไทย"
+    },
+    {
+      "id": "บริษัท กิจการร่วมค้า รอยเตอร์ แอนด์ ไดเบ้า จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท ประยูรวิศว์ จำกัด",
+      "type": "Winner",
+      "total_projects_won": 2,
+      "total_bids_participated": 3,
+      "total_budget_won": 1398860000,
+      "dominant_agency": "กรมทางหลวง"
+    },
+    {
+      "id": "บริษัท พรรณีวรกิจก่อสร้างและขนส่ง จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 3,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท บี ซี ดี ซี จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 2,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท เมืองสะอาด จำกัด",
+      "type": "Winner",
+      "total_projects_won": 2,
+      "total_bids_participated": 2,
+      "total_budget_won": 212336000,
+      "dominant_agency": "เทศบาลตำบลบางปู"
+    },
+    {
+      "id": "บริษัท ซีเอสเอส เมดิคอล จำกัด",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 258900000,
+      "dominant_agency": "เมืองพัทยา"
+    },
+    {
+      "id": "บริษัท มหานคร  เมดิคัล  เซ็นเตอร์ จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท วี.สถาปัตย์ จำกัด",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 2,
+      "total_budget_won": 717000000,
+      "dominant_agency": "โรงพยาบาลนครพิงค์"
+    },
+    {
+      "id": "กิจการร่วมค้า ลำปางไพศาล และโอเบการก่อสร้าง",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 417000000,
+      "dominant_agency": "สำนักงานคณะกรรมการการศึกษาขั้นพื้นฐาน"
+    },
+    {
+      "id": "บริษัท ส.การโยธา 1993 จำกัด",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 144898000,
+      "dominant_agency": "โรงพยาบาลกันทรลักษ์"
+    },
+    {
+      "id": "บริษัท เลิศพัฒนาคอนสตรัคชั่น จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 2,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท กรีนเทค ออโต้ จำกัด",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 596000000,
+      "dominant_agency": "กรมป้องกันและบรรเทาสาธารณภัย"
+    },
+    {
+      "id": "บริษัท แสงฟ้าอีซูซุเซลส์ จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท อึ้งธนสุวรรณสตึก จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "ห้างหุ้นส่วนจำกัด สี่แสงโยธาการ",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 2,
+      "total_budget_won": 629501900,
+      "dominant_agency": "กรมทางหลวง"
+    },
+    {
+      "id": "บริษัท ซีวิล คอนสตรัคชั่น เซอร์วิสเซส แอนด์ โปรดักส์ จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท คริสเตียนีและนีลเส็น (ไทย) จำกัด (มหาชน)",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท ช. ทวีก่อสร้าง จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท เสริมสงวนก่อสร้าง จำกัด",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 839000000,
+      "dominant_agency": "กรมทางหลวง"
+    },
+    {
+      "id": "บริษัท เอ.เอส.แอสโซซิเอท เอนยิเนียริ่ง (1964) จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท เค.อาร์.ซี.เอ็นจิเนียริ่ง  จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท วิจิตรภัณฑ์ก่อสร้าง จำกัด",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 869552000,
+      "dominant_agency": "กรมทางหลวง"
+    },
+    {
+      "id": "บริษัท วนิชชัยก่อสร้าง(1979) จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 2,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "กิจการร่วมค้า วีแอนด์เค",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 829525000,
+      "dominant_agency": "กรมทางหลวง"
+    },
+    {
+      "id": "บริษัท เชียงใหม่คอนสตรัคชั่น จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท ศูนย์ทดสอบแบตเตอรี่ ยานยนต์ไฟฟ้า และ ผลิตภัณฑ์อิเล็กทรอนิกส์ จำกัด",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 100300000,
+      "dominant_agency": "สำนักงานพัฒนาวิทยาศาสตร์และเทคโนโลยีแห่งชาติ"
+    },
+    {
+      "id": "บริษัท ภูดิศณ์เทค จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท เนชั่นแนล ไดเร็ค เน็ทเวิร์ค จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท สุทัศน์วิศวการ (1994) จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 2,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท ไพศาลกิจซิสเต็ม จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท งามวงศ์วานการช่าง จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท วงษ์สยามก่อสร้าง จำกัด",
+      "type": "Winner",
+      "total_projects_won": 3,
+      "total_bids_participated": 4,
+      "total_budget_won": 6817300000,
+      "dominant_agency": "การประปาส่วนภูมิภาค"
+    },
+    {
+      "id": "บริษัท บางแสนมหานคร จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 3,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท ยิบอินซอย จำกัด",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 638080000,
+      "dominant_agency": "สำนักงานตำรวจแห่งชาติ"
+    },
+    {
+      "id": "ยูซีไอ ไฮโดรควิพ",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท จักรวาลคอมมิวนิเคชั่น ซีสเท็ม จำกัด",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 315959595,
+      "dominant_agency": "กองทัพเรือ"
+    },
+    {
+      "id": "บริษัท ร็อคเวล ออโตเมชั่น ไทย จำกัด (ผ่าน บริษัท เน็กซ์เตอร์ แอร์โรสเปซ แอนด์ มารีน จำกัด)",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท กฤษณะโกลบอล จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท Wartsila Lyngso Marine A/S (ผ่าน บริษัท ส.พร้อมไพบูลย์ แอ๊สโซซิเอท (2528) จำกัด)",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท โรงพยาบาลจุฬารัตน์ จำกัด (มหาชน)",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 449999300,
+      "dominant_agency": "โรงพยาบาลสมุทรปราการ"
+    },
+    {
+      "id": "บริษัท พลัส เฮลท์ จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท ไดนามิค กรุ๊ป โปรดักส์ จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 2,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท บอสเวลล์ คอนเนคชั่น กรุ๊ป จำกัด",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 153010000,
+      "dominant_agency": "บริษัท ท่าอากาศยานไทย จำกัด (มหาชน)"
+    },
+    {
+      "id": "บริษัท ระยองวิศวกรรมและซ่อมบำรุง จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท ชำนาญกิจ วิศวกรรม จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท ษฎา วิศวกรรม จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท วัฒโนชาการก่อสร้าง จำกัด",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 138950000,
+      "dominant_agency": "องค์การบริหารส่วนตำบลคลองสาม"
+    },
+    {
+      "id": "บริษัท เวิลด์ เดสคอน จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท วิบูลย์โชค จำกัด",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 1148850000,
+      "dominant_agency": "การประปาส่วนภูมิภาค"
+    },
+    {
+      "id": "บริษัท ไว-วา จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท ท่าราบก่อสร้าง จำกัด",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 649360000,
+      "dominant_agency": "กรมทางหลวง"
+    },
+    {
+      "id": "บริษัท พีระมิดคอนกรีต จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท ทองมาคอนแทรคเตอร์ จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 2,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท กรีนไลท์ อินเตอร์เนชั่นแนล จำกัด",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 2,
+      "total_budget_won": 645000000,
+      "dominant_agency": "กรมทางหลวง"
+    },
+    {
+      "id": "บริษัท สี่แสงการโยธา(1979) จำกัด",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 2,
+      "total_budget_won": 717957400,
+      "dominant_agency": "กรมทางหลวง"
+    },
+    {
+      "id": "บริษัท ซีวิลเอนจีเนียริง จำกัด (มหาชน)",
+      "type": "Winner",
+      "total_projects_won": 2,
+      "total_bids_participated": 2,
+      "total_budget_won": 1421400000,
+      "dominant_agency": "กรมทางหลวง"
+    },
+    {
+      "id": "บริษัท แสงชัยโชค จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 2,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัทจำกัด บริษัท ชอกมลรัตน์ จำกัด(สัญญากิจการค้าร่วม)",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 0,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "กิจการค้าร่วม บริษัท ธาราวัญ คอนสตรัคชั่น จำกัด และ บริษัท ชอกมลรัตน์ จำกัด และ บริษัท สุนิสาจุฬารัตน์การโยธา จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท ซีเอ็นเอ็น การโยธา  จำกัด",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 263285000,
+      "dominant_agency": "โรงพยาบาลสุโขทัย"
+    },
+    {
+      "id": "บริษัท ซีซีเอส คอร์ปอเรชั่น  จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "กิจการร่วมค้า เอ็ม.อี.ซี. ไทยอีสาน",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท จักรราช คอนสตรัคชั่น จำกัด",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 2,
+      "total_budget_won": 207100000,
+      "dominant_agency": "โรงพยาบาลชัยบาดาล"
+    },
+    {
+      "id": "บริษัท เอ็ม อี อี จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท สยามสกุลช่าง จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "กิจการค้าร่วม FMA",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "กิจการร่วมค้า LECC",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 209888000,
+      "dominant_agency": "โรงพยาบาลพิมาย"
+    },
+    {
+      "id": "บริษัท ชูไลท์ เอนจิเนียริ่ง จำกัด",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "ห้างหุ้นส่วนจำกัด สกลรุ่งเรืองกิจวิศวกรรม",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "กิจการค้าร่วม พีเอสพี แอนด์ ฟอร์ท",
+      "type": "Winner",
+      "total_projects_won": 1,
+      "total_bids_participated": 1,
+      "total_budget_won": 516996180,
+      "dominant_agency": "การไฟฟ้าส่วนภูมิภาค"
+    },
+    {
+      "id": "i2All Consortium",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    },
+    {
+      "id": "บริษัท ช.การช่าง จำกัด (มหาชน)",
+      "type": "Cover Bidder (คู่เทียบ)",
+      "total_projects_won": 0,
+      "total_bids_participated": 1,
+      "total_budget_won": 0,
+      "dominant_agency": "ไม่ระบุ"
+    }
+  ],
+  "links": [
+    {
+      "source": "Consortium Srichonlathorn & Grandline",
+      "target": "บริษัท วรประดิษฐ์ จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "เทศบาลตำบลกะรน"
+      ],
+      "provinces_involved": [
+        "ภูเก็ต"
+      ]
+    },
+    {
+      "source": "Consortium Srichonlathorn & Grandline",
+      "target": "บริษัท แอ็ดวานซ์อินฟอร์เมชั่นเทคโนโลยี จำกัด (มหาชน)",
+      "competed_times": 1,
+      "agencies_involved": [
+        "เทศบาลตำบลกะรน"
+      ],
+      "provinces_involved": [
+        "ภูเก็ต"
+      ]
+    },
+    {
+      "source": "Consortium Srichonlathorn & Grandline",
+      "target": "บริษัท อาร์ เอส เอส 2016 จำกัด (มหาชน)",
+      "competed_times": 1,
+      "agencies_involved": [
+        "เทศบาลตำบลกะรน"
+      ],
+      "provinces_involved": [
+        "ภูเก็ต"
+      ]
+    },
+    {
+      "source": "บริษัท ต.พีระกฤช จำกัด",
+      "target": "กิจการร่วมค้า ไทยพัฒนา กรุ๊ป",
+      "competed_times": 1,
+      "agencies_involved": [
+        "มหาวิทยาลัยราชภัฏศรีสะเกษ"
+      ],
+      "provinces_involved": [
+        "ศรีสะเกษ"
+      ]
+    },
+    {
+      "source": "บริษัท ต.พีระกฤช จำกัด",
+      "target": "กิจการร่วมค้า AIC",
+      "competed_times": 1,
+      "agencies_involved": [
+        "มหาวิทยาลัยราชภัฏศรีสะเกษ"
+      ],
+      "provinces_involved": [
+        "ศรีสะเกษ"
+      ]
+    },
+    {
+      "source": "บริษัท วิรุฬห์ แอนด์ เกวนเนส จำกัด",
+      "target": "บริษัท เค-แมน ออโต้เซอร์วิส จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "องค์การบริหารส่วนจังหวัดสงขลา"
+      ],
+      "provinces_involved": [
+        "สงขลา"
+      ]
+    },
+    {
+      "source": "บริษัท วิรุฬห์ แอนด์ เกวนเนส จำกัด",
+      "target": "ห้างหุ้นส่วนจำกัด เค.ที.เอ็ม.999",
+      "competed_times": 1,
+      "agencies_involved": [
+        "องค์การบริหารส่วนจังหวัดสงขลา"
+      ],
+      "provinces_involved": [
+        "สงขลา"
+      ]
+    },
+    {
+      "source": "กลุ่ม Consortium ETEM & PKSP",
+      "target": "บริษัท สิริมงคลเพาเวอร์เคเบิล จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "การไฟฟ้าส่วนภูมิภาค"
+      ],
+      "provinces_involved": [
+        "ปัตตานี"
+      ]
+    },
+    {
+      "source": "กลุ่ม Consortium ETEM & PKSP",
+      "target": "บริษัท เบญจกาย เอ็นเตอร์ไพรส์ จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "การไฟฟ้าส่วนภูมิภาค"
+      ],
+      "provinces_involved": [
+        "ปัตตานี"
+      ]
+    },
+    {
+      "source": "บริษัท เอส เทค ซีวิล แอนด์ คอนสตรัคชั่น จำกัด",
+      "target": "บริษัท กรุงธนเอนยิเนียร์ จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมชลประทาน"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท เอส เทค ซีวิล แอนด์ คอนสตรัคชั่น จำกัด",
+      "target": "ห้างหุ้นส่วนจำกัด น้ำก่ำก่อสร้าง",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมชลประทาน"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "ห้างหุ้นส่วนจำกัด โชคสุวัฒนา",
+      "target": "บริษัท เบญจกาย เอ็นเตอร์ไพรส์ จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "การไฟฟ้าส่วนภูมิภาค"
+      ],
+      "provinces_involved": [
+        "เพชรบุรี"
+      ]
+    },
+    {
+      "source": "ห้างหุ้นส่วนจำกัด โชคสุวัฒนา",
+      "target": "ห้างหุ้นส่วนจำกัด สยามอุดรเทรดดิ้ง",
+      "competed_times": 1,
+      "agencies_involved": [
+        "การไฟฟ้าส่วนภูมิภาค"
+      ],
+      "provinces_involved": [
+        "เพชรบุรี"
+      ]
+    },
+    {
+      "source": "บริษัท เบญจกาย เอ็นเตอร์ไพรส์ จำกัด",
+      "target": "บริษัท สิริมงคลเพาเวอร์เคเบิล จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "การไฟฟ้าส่วนภูมิภาค"
+      ],
+      "provinces_involved": [
+        "นครศรีธรรมราช"
+      ]
+    },
+    {
+      "source": "บริษัท เบญจกาย เอ็นเตอร์ไพรส์ จำกัด",
+      "target": "บริษัท สยามราชธานี จำกัด (มหาชน)",
+      "competed_times": 2,
+      "agencies_involved": [
+        "การไฟฟ้าส่วนภูมิภาค"
+      ],
+      "provinces_involved": [
+        "นครศรีธรรมราช",
+        "ลพบุรี"
+      ]
+    },
+    {
+      "source": "กิจการค้าร่วม บริษัท สยามราชธานี จำกัด (มหาชน) และ บริษัท เพาเวอร์ เทคโนโลยี่ ดีเวลลอปเมนท์ จำกัด",
+      "target": "บริษัท สิริมงคลเพาเวอร์เคเบิล จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "การไฟฟ้าส่วนภูมิภาค"
+      ],
+      "provinces_involved": [
+        "เชียงใหม่"
+      ]
+    },
+    {
+      "source": "กิจการค้าร่วม บริษัท สยามราชธานี จำกัด (มหาชน) และ บริษัท เพาเวอร์ เทคโนโลยี่ ดีเวลลอปเมนท์ จำกัด",
+      "target": "ห้างหุ้นส่วนจำกัด สยามอุดรเทรดดิ้ง",
+      "competed_times": 1,
+      "agencies_involved": [
+        "การไฟฟ้าส่วนภูมิภาค"
+      ],
+      "provinces_involved": [
+        "เชียงใหม่"
+      ]
+    },
+    {
+      "source": "บริษัท พี.เอ็ม.ซี.คอนแทร็คเตอร์ จำกัด",
+      "target": "บริษัท อีทีอี เมเนจเมนท์ จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "การไฟฟ้าส่วนภูมิภาค"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท พี.เอ็ม.ซี.คอนแทร็คเตอร์ จำกัด",
+      "target": "ห้างหุ้นส่วนจำกัด โชคสุวัฒนา",
+      "competed_times": 1,
+      "agencies_involved": [
+        "การไฟฟ้าส่วนภูมิภาค"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท เบญจกาย เอ็นเตอร์ไพรส์ จำกัด",
+      "target": "ห้างหุ้นส่วนจำกัด โชคสุวัฒนา",
+      "competed_times": 1,
+      "agencies_involved": [
+        "การไฟฟ้าส่วนภูมิภาค"
+      ],
+      "provinces_involved": [
+        "ลพบุรี"
+      ]
+    },
+    {
+      "source": "ห้างหุ้นส่วนจำกัด พิจิตสุวรรณ วิศวกร",
+      "target": "ห้างหุ้นส่วนจำกัด ชินวรยะลาก่อสร้าง",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมชลประทาน"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท สุพรีม ดิสทิบิวชั่น จำกัด (มหาชน)",
+      "target": "บริษัท เมโทรโปรเฟสชั่นแนลโปรดักส์ จำกัด",
+      "competed_times": 7,
+      "agencies_involved": [
+        "สำนักงานคณะกรรมการการศึกษาขั้นพื้นฐาน"
+      ],
+      "provinces_involved": [
+        "พิจิตร",
+        "สงขลา",
+        "ตาก",
+        "ปราจีนบุรี",
+        "สิงห์บุรี",
+        "ราชบุรี",
+        "พะเยา"
+      ]
+    },
+    {
+      "source": "บริษัท กันต์กนิษฐ์ ก่อสร้าง จำกัด",
+      "target": "บริษัท ศิวกรการช่าง จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "มหาวิทยาลัยเทคโนโลยีราชมงคลรัตนโกสินทร์"
+      ],
+      "provinces_involved": [
+        "นครปฐม"
+      ]
+    },
+    {
+      "source": "บริษัท กันต์กนิษฐ์ ก่อสร้าง จำกัด",
+      "target": "บริษัท ประดิษฐ์ธนานุรักษ์ จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "มหาวิทยาลัยเทคโนโลยีราชมงคลรัตนโกสินทร์"
+      ],
+      "provinces_involved": [
+        "นครปฐม"
+      ]
+    },
+    {
+      "source": "ห้างหุ้นส่วนจำกัด ธงไทยหันคา",
+      "target": "บริษัท นนทบุรี เอ็นจิเนีย จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมชลประทาน"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "ห้างหุ้นส่วนจำกัด ธงไทยหันคา",
+      "target": "บริษัท อรลักษณ์สิงห์บุรี (1994) จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมชลประทาน"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "ห้างหุ้นส่วนจำกัด ธงไทยหันคา",
+      "target": "บริษัท อุทัยไชโย จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมชลประทาน"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "ห้างหุ้นส่วนจำกัด ฮิวเมติค",
+      "target": "บริษัท ดีดี ควอลิตี้ โปรดักท์ จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "มหาวิทยาลัยพะเยา"
+      ],
+      "provinces_involved": [
+        "พะเยา"
+      ]
+    },
+    {
+      "source": "บริษัท โชว์ ดีไซน์ จำกัด",
+      "target": "บริษัท พอชซิทีฟ จำกัด",
+      "competed_times": 2,
+      "agencies_involved": [
+        "องค์การบริหารส่วนตำบลราชาเทวะ"
+      ],
+      "provinces_involved": [
+        "สมุทรปราการ"
+      ]
+    },
+    {
+      "source": "บริษัท โชว์ ดีไซน์ จำกัด",
+      "target": "บริษัท กันต์กนิษฐ์ ก่อสร้าง จำกัด",
+      "competed_times": 2,
+      "agencies_involved": [
+        "องค์การบริหารส่วนตำบลราชาเทวะ"
+      ],
+      "provinces_involved": [
+        "สมุทรปราการ"
+      ]
+    },
+    {
+      "source": "กิจการค้าร่วมเอสวีดับบลิว",
+      "target": "บริษัท แอ็ดวานซ์อินฟอร์เมชั่นเทคโนโลยี จำกัด (มหาชน)",
+      "competed_times": 1,
+      "agencies_involved": [
+        "สำนักงานคณะกรรมการการศึกษาขั้นพื้นฐาน"
+      ],
+      "provinces_involved": [
+        "สุราษฎร์ธานี"
+      ]
+    },
+    {
+      "source": "บริษัท เอสวีโอเอ จำกัด (มหาชน)",
+      "target": "บริษัท แอ็ดวานซ์อินฟอร์เมชั่นเทคโนโลยี จำกัด (มหาชน)",
+      "competed_times": 4,
+      "agencies_involved": [
+        "สำนักงานคณะกรรมการการศึกษาขั้นพื้นฐาน"
+      ],
+      "provinces_involved": [
+        "ศรีสะเกษ",
+        "ตรัง",
+        "เชียงราย",
+        "นครศรีธรรมราช"
+      ]
+    },
+    {
+      "source": "บริษัท ไวร์เออ แอนด์ ไวร์เลส จำกัด",
+      "target": "บริษัท มิชชั่น อินโฟ เทคโนโลยี  จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "สำนักงานคณะกรรมการการศึกษาขั้นพื้นฐาน"
+      ],
+      "provinces_involved": [
+        "เพชรบูรณ์"
+      ]
+    },
+    {
+      "source": "บริษัท สุพรีม ดิสทิบิวชั่น จำกัด (มหาชน)",
+      "target": "บริษัท เอสวีโอเอ จำกัด (มหาชน)",
+      "competed_times": 5,
+      "agencies_involved": [
+        "สำนักงานคณะกรรมการการศึกษาขั้นพื้นฐาน"
+      ],
+      "provinces_involved": [
+        "มหาสารคาม",
+        "สุรินทร์",
+        "ขอนแก่น",
+        "บุรีรัมย์",
+        "น่าน"
+      ]
+    },
+    {
+      "source": "บริษัท ดิอาคิเท็คส์ แอนด์ เทิร์นคีย์ จำกัด",
+      "target": "บริษัท อาคาร 33 จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมวิชาการเกษตร"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "กิจการร่วมค้า อาร์อาร์ แอนด์ ทีเอส",
+      "target": "ห้างหุ้นส่วนจำกัด พินิจอุดรก่อสร้าง",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมชลประทาน"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "กิจการร่วมค้า อาร์อาร์ แอนด์ ทีเอส",
+      "target": "ห้างหุ้นส่วนจำกัด น้ำก่ำก่อสร้าง",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมชลประทาน"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "กิจการร่วมค้า วีเค - บีเค ก่อสร้าง",
+      "target": "บริษัท ภรณ์เพียร จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "เทศบาลตำบลศรีสุนทร"
+      ],
+      "provinces_involved": [
+        "ภูเก็ต"
+      ]
+    },
+    {
+      "source": "กิจการร่วมค้า วีเค - บีเค ก่อสร้าง",
+      "target": "ห้างหุ้นส่วนจำกัด พี.เค.2001",
+      "competed_times": 1,
+      "agencies_involved": [
+        "เทศบาลตำบลศรีสุนทร"
+      ],
+      "provinces_involved": [
+        "ภูเก็ต"
+      ]
+    },
+    {
+      "source": "บริษัท ซีเอ โอ คล๊อก จำกัด",
+      "target": "บริษัท ไร้ท์แมน จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "เทศบาลตำบลบางปู"
+      ],
+      "provinces_involved": [
+        "สมุทรปราการ"
+      ]
+    },
+    {
+      "source": "บริษัท ซีเอ โอ คล๊อก จำกัด",
+      "target": "บริษัท แปลน โมทิฟ จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "เทศบาลตำบลบางปู"
+      ],
+      "provinces_involved": [
+        "สมุทรปราการ"
+      ]
+    },
+    {
+      "source": "บริษัท ซีเอ โอ คล๊อก จำกัด",
+      "target": "บริษัท ทูแมกซ์ จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "เทศบาลตำบลบางปู"
+      ],
+      "provinces_involved": [
+        "สมุทรปราการ"
+      ]
+    },
+    {
+      "source": "บริษัท ไทยทราโฟ แมนูแฟคเจอริ่ง จำกัด",
+      "target": "บริษัท เจริญชัยหม้อแปลงไฟฟ้า จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "การไฟฟ้านครหลวง"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท ไทยทราโฟ แมนูแฟคเจอริ่ง จำกัด",
+      "target": "บริษัท เอกรัฐวิศวกรรม จำกัด (มหาชน)",
+      "competed_times": 1,
+      "agencies_involved": [
+        "การไฟฟ้านครหลวง"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท คิวทีซี เอนเนอร์ยี่ จำกัด (มหาชน)",
+      "target": "บริษัท พรีไซซ อีเลคตริค แมนูแฟคเจอริ่ง จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "การไฟฟ้านครหลวง"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท คิวทีซี เอนเนอร์ยี่ จำกัด (มหาชน)",
+      "target": "บริษัท ไทยทราโฟ แมนูแฟคเจอริ่ง จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "การไฟฟ้านครหลวง"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท คิวทีซี เอนเนอร์ยี่ จำกัด (มหาชน)",
+      "target": "บริษัท วิสต้า ทราโฟ จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "การไฟฟ้านครหลวง"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท คิวทีซี เอนเนอร์ยี่ จำกัด (มหาชน)",
+      "target": "บริษัท เซจ อินเวนชั่น จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "การไฟฟ้านครหลวง"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท เจริญชัยหม้อแปลงไฟฟ้า จำกัด",
+      "target": "บริษัท วิสต้า ทราโฟ จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "การไฟฟ้านครหลวง"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท เจริญชัยหม้อแปลงไฟฟ้า จำกัด",
+      "target": "บริษัท เอกรัฐวิศวกรรม จำกัด (มหาชน)",
+      "competed_times": 1,
+      "agencies_involved": [
+        "การไฟฟ้านครหลวง"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท เจริญชัยหม้อแปลงไฟฟ้า จำกัด",
+      "target": "บริษัท ไทยแมกซ์เวลอิเลคทริค  จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "การไฟฟ้านครหลวง"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท ชัยเจริญไมตรี จำกัด",
+      "target": "บริษัท กรุงธนเอนยิเนียร์ จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมชลประทาน"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท ชัยเจริญไมตรี จำกัด",
+      "target": "ห้างหุ้นส่วนจำกัด พินิจอุดรก่อสร้าง",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมชลประทาน"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท ชัยเจริญไมตรี จำกัด",
+      "target": "ห้างหุ้นส่วนจำกัด พิจิตสุวรรณ วิศวกร",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมชลประทาน"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท เอสวีเค เทคโนโลยี จำกัด",
+      "target": "บริษัท เอฟเวอร์เรสท์ ซัพพลาย จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "สถาบันเทคโนโลยีป้องกันประเทศ"
+      ],
+      "provinces_involved": [
+        "นนทบุรี"
+      ]
+    },
+    {
+      "source": "บริษัท เอสวีเค เทคโนโลยี จำกัด",
+      "target": "บริษัท เอสแอลซี  โพรเทค จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "สถาบันเทคโนโลยีป้องกันประเทศ"
+      ],
+      "provinces_involved": [
+        "นนทบุรี"
+      ]
+    },
+    {
+      "source": "บริษัท ไทยแมกซ์เวลอิเลคทริค  จำกัด",
+      "target": "บริษัท เจริญชัยหม้อแปลงไฟฟ้า จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "การไฟฟ้านครหลวง"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท ไทยแมกซ์เวลอิเลคทริค  จำกัด",
+      "target": "บริษัท พรีไซซ อีเลคตริค แมนูแฟคเจอริ่ง จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "การไฟฟ้านครหลวง"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท ไทยแมกซ์เวลอิเลคทริค  จำกัด",
+      "target": "บริษัท เอส.พี.อีเล็คทริค อินดัสตรี จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "การไฟฟ้านครหลวง"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท ไทยแมกซ์เวลอิเลคทริค  จำกัด",
+      "target": "บริษัท ไทยทราโฟ แมนูแฟคเจอริ่ง จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "การไฟฟ้านครหลวง"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท ไทยแมกซ์เวลอิเลคทริค  จำกัด",
+      "target": "บริษัท คิวทีซี เอนเนอร์ยี่ จำกัด (มหาชน)",
+      "competed_times": 1,
+      "agencies_involved": [
+        "การไฟฟ้านครหลวง"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท ไทยแมกซ์เวลอิเลคทริค  จำกัด",
+      "target": "บริษัท เอเซียทราโฟ จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "การไฟฟ้านครหลวง"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท ไทยแมกซ์เวลอิเลคทริค  จำกัด",
+      "target": "บริษัท ทริปเปิ้ล ที เอ็นเท็ค จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "การไฟฟ้านครหลวง"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท โชคชัยวัฒนาก่อสร้าง จำกัด",
+      "target": "บริษัท กรีน ฟอเรสท์ เอ็นจิเนียริ่ง จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "มหาวิทยาลัยราชภัฏเชียงใหม่"
+      ],
+      "provinces_involved": [
+        "เชียงใหม่"
+      ]
+    },
+    {
+      "source": "บริษัท โชคชัยวัฒนาก่อสร้าง จำกัด",
+      "target": "ห้างหุ้นส่วนจำกัด พายัพคอนสตรัคชั่น",
+      "competed_times": 1,
+      "agencies_involved": [
+        "มหาวิทยาลัยราชภัฏเชียงใหม่"
+      ],
+      "provinces_involved": [
+        "เชียงใหม่"
+      ]
+    },
+    {
+      "source": "บริษัท โชคชัยวัฒนาก่อสร้าง จำกัด",
+      "target": "เอ็นพีซี",
+      "competed_times": 1,
+      "agencies_involved": [
+        "มหาวิทยาลัยราชภัฏเชียงใหม่"
+      ],
+      "provinces_involved": [
+        "เชียงใหม่"
+      ]
+    },
+    {
+      "source": "กิจการร่วมค้า ทีดี นครศรีธรรมราช",
+      "target": "บริษัท กรุงธนเอนยิเนียร์ จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมชลประทาน"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "กิจการร่วมค้า ทีดี นครศรีธรรมราช",
+      "target": "บริษัท ซิโน-ไทย เอ็นจีเนียริ่ง แอนด์ คอนสตรัคชั่น จำกัด (มหาชน)",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมชลประทาน"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "กลุ่มนิติบุคคลร่วมทำงาน บริษัท เอ็นเทอร์ไพร้ซวายด์ โซลูชั่นส์ จำกัด และ บริษัท ชีต้าร์-พีเทรีส จอยท์เวนเจอร์ จำกัด",
+      "target": "บริษัท ที.ที.เอส. คอร์ปอเรชั่น จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "บริษัท ท่าอากาศยานไทย จำกัด (มหาชน)"
+      ],
+      "provinces_involved": [
+        "สมุทรปราการ"
+      ]
+    },
+    {
+      "source": "กลุ่มนิติบุคคลร่วมทำงาน บริษัท เอ็นเทอร์ไพร้ซวายด์ โซลูชั่นส์ จำกัด และ บริษัท ชีต้าร์-พีเทรีส จอยท์เวนเจอร์ จำกัด",
+      "target": "บริษัท แอโร่ คอร์ปอเรชั่น จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "บริษัท ท่าอากาศยานไทย จำกัด (มหาชน)"
+      ],
+      "provinces_involved": [
+        "สมุทรปราการ"
+      ]
+    },
+    {
+      "source": "บริษัท บุรีรัมย์พนาสิทธิ์ จำกัด",
+      "target": "บริษัท บุญสหะการสร้าง จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมชลประทาน"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท บุรีรัมย์พนาสิทธิ์ จำกัด",
+      "target": "บริษัท ยิ่งเจริญก่อสร้างบุรีรัมย์ จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมชลประทาน"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท เทิร์นคีย์ คอมมูนิเคชั่น เซอร์วิส จำกัด (มหาชน)",
+      "target": "บริษัท ยูไนเต็ด เทเลคอม เซลส์ แอนด์ เซอร์วิสเซส จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "บริษัท ท่าอากาศยานไทย จำกัด (มหาชน)"
+      ],
+      "provinces_involved": [
+        "สมุทรปราการ"
+      ]
+    },
+    {
+      "source": "บริษัท เทิร์นคีย์ คอมมูนิเคชั่น เซอร์วิส จำกัด (มหาชน)",
+      "target": "บริษัท อินฟอร์เมชั่น แอนด์ คอมมิวนิเคชั่น เน็ทเวิร์คส จำกัด (มหาชน)",
+      "competed_times": 1,
+      "agencies_involved": [
+        "บริษัท ท่าอากาศยานไทย จำกัด (มหาชน)"
+      ],
+      "provinces_involved": [
+        "สมุทรปราการ"
+      ]
+    },
+    {
+      "source": "บริษัท วิรุฬห์ แอนด์ เกวนเนส จำกัด",
+      "target": "บริษัท ดับเบิลยู เค ซี  จำกัด",
+      "competed_times": 2,
+      "agencies_involved": [
+        "กรมชลประทาน"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท ดับเบิลยู เค ซี  จำกัด",
+      "target": "บริษัท วิรุฬห์ แอนด์ เกวนเนส จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมชลประทาน"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "ห้างหุ้นส่วนจำกัด น้ำก่ำก่อสร้าง",
+      "target": "บริษัท ชัยเจริญไมตรี จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมชลประทาน"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "ห้างหุ้นส่วนจำกัด น้ำก่ำก่อสร้าง",
+      "target": "ห้างหุ้นส่วนจำกัด อุบลรุ่งเรืองกลการ",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมชลประทาน"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "ห้างหุ้นส่วนจำกัด น้ำก่ำก่อสร้าง",
+      "target": "ห้างหุ้นส่วนจำกัด พินิจอุดรก่อสร้าง",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมชลประทาน"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท ไทยวัฒน์วิศวการทาง จำกัด",
+      "target": "บริษัท ชัยเจริญไมตรี จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมชลประทาน"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท ไทยวัฒน์วิศวการทาง จำกัด",
+      "target": "ห้างหุ้นส่วนจำกัด ไทยเจริญศรีสะเกษ",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมชลประทาน"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท อินโนพาวเวอร์ จำกัด",
+      "target": "บริษัท ดาวรุ่ง ทราเวล จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "องค์การบริหารส่วนจังหวัดกาญจนบุรี"
+      ],
+      "provinces_involved": [
+        "กาญจนบุรี"
+      ]
+    },
+    {
+      "source": "บริษัทมหาชนจำกัด บริษัท อินฟอร์เมชั่น แอนด์ คอมมิวนิเคชั่น เน็ทเวิร์คส จำกัด (มหาชน)(สัญญากิจการค้าร่วม)",
+      "target": "บริษัท สุพรีม ดิสทิบิวชั่น จำกัด (มหาชน)",
+      "competed_times": 4,
+      "agencies_involved": [
+        "สำนักงานคณะกรรมการการศึกษาขั้นพื้นฐาน"
+      ],
+      "provinces_involved": [
+        "สมุทรปราการ",
+        "จันทบุรี",
+        "สุพรรณบุรี",
+        "อุทัยธานี"
+      ]
+    },
+    {
+      "source": "บริษัทมหาชนจำกัด บริษัท อินฟอร์เมชั่น แอนด์ คอมมิวนิเคชั่น เน็ทเวิร์คส จำกัด (มหาชน)(สัญญากิจการค้าร่วม)",
+      "target": "เอสไอ คอนซอเตียม",
+      "competed_times": 5,
+      "agencies_involved": [
+        "สำนักงานคณะกรรมการการศึกษาขั้นพื้นฐาน"
+      ],
+      "provinces_involved": [
+        "สมุทรปราการ",
+        "จันทบุรี",
+        "สุพรรณบุรี",
+        "อุทัยธานี",
+        "สกลนคร"
+      ]
+    },
+    {
+      "source": "บริษัท วิรุฬห์ แอนด์ เกวนเนส จำกัด",
+      "target": "บริษัท นนทบุรี เอ็นจิเนีย จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมชลประทาน"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท เจแอนด์ซี เซอร์วิส กรุ๊ป จำกัด",
+      "target": "บริษัท เอิกพงษ์ จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "องค์การบริหารส่วนตำบลมาบยางพร"
+      ],
+      "provinces_involved": [
+        "ระยอง"
+      ]
+    },
+    {
+      "source": "บริษัท เอ็ม.แซท.ดี. คาร์เซ็นเตอร์ จำกัด",
+      "target": "บริษัท ไทย เพรสทิจ เร้นท์ เอ คาร์ จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมราชทัณฑ์"
+      ],
+      "provinces_involved": [
+        "นนทบุรี"
+      ]
+    },
+    {
+      "source": "บริษัท เอ็ม.แซท.ดี. คาร์เซ็นเตอร์ จำกัด",
+      "target": "บริษัท สยามราชธานี จำกัด (มหาชน)",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมราชทัณฑ์"
+      ],
+      "provinces_involved": [
+        "นนทบุรี"
+      ]
+    },
+    {
+      "source": "บริษัท เมโทรโปรเฟสชั่นแนลโปรดักส์ จำกัด",
+      "target": "บริษัท สุพรีม ดิสทิบิวชั่น จำกัด (มหาชน)",
+      "competed_times": 4,
+      "agencies_involved": [
+        "สำนักงานคณะกรรมการการศึกษาขั้นพื้นฐาน"
+      ],
+      "provinces_involved": [
+        "พัทลุง",
+        "ประจวบคีรีขันธ์",
+        "พังงา",
+        "แพร่"
+      ]
+    },
+    {
+      "source": "บริษัท เมโทรโปรเฟสชั่นแนลโปรดักส์ จำกัด",
+      "target": "กิจการค้าร่วมเอสวีดับบลิว",
+      "competed_times": 1,
+      "agencies_involved": [
+        "สำนักงานคณะกรรมการการศึกษาขั้นพื้นฐาน"
+      ],
+      "provinces_involved": [
+        "พัทลุง"
+      ]
+    },
+    {
+      "source": "บริษัทจำกัด บริษัท ยิบอินซอย จำกัด(สัญญากิจการค้าร่วม)",
+      "target": "บริษัท ฟอร์ท คอร์ปอเรชั่น จำกัด (มหาชน)",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมศุลกากร"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัทจำกัด บริษัท ยิบอินซอย จำกัด(สัญญากิจการค้าร่วม)",
+      "target": "บริษัท วิชั่น แอนด์ ซีเคียวริตี้ ซีสเต็ม จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมศุลกากร"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัทจำกัด บริษัท ยิบอินซอย จำกัด(สัญญากิจการค้าร่วม)",
+      "target": "สกายไฮและยิบอินซอย",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมศุลกากร"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท ศักดิ์ทองพูน จำกัด",
+      "target": "บริษัท ฟิวเจอร์ คอนสตรัคชั่น จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "มหาวิทยาลัยแม่โจ้"
+      ],
+      "provinces_involved": [
+        "เชียงใหม่"
+      ]
+    },
+    {
+      "source": "บริษัท ศักดิ์ทองพูน จำกัด",
+      "target": "บริษัท วรรณรัช พัฒนา จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "มหาวิทยาลัยแม่โจ้"
+      ],
+      "provinces_involved": [
+        "เชียงใหม่"
+      ]
+    },
+    {
+      "source": "บริษัท ศักดิ์ทองพูน จำกัด",
+      "target": "บริษัท เอเออี เอ็นจิเนียริ่ง (ประเทศไทย)  จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "มหาวิทยาลัยแม่โจ้"
+      ],
+      "provinces_involved": [
+        "เชียงใหม่"
+      ]
+    },
+    {
+      "source": "บริษัท ศักดิ์ทองพูน จำกัด",
+      "target": "ห้างหุ้นส่วนจำกัด แสวงฟ้าก่อสร้าง",
+      "competed_times": 1,
+      "agencies_involved": [
+        "มหาวิทยาลัยแม่โจ้"
+      ],
+      "provinces_involved": [
+        "เชียงใหม่"
+      ]
+    },
+    {
+      "source": "บริษัท ศักดิ์ทองพูน จำกัด",
+      "target": "บริษัท ศรพญาหิรัญ จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "มหาวิทยาลัยแม่โจ้"
+      ],
+      "provinces_involved": [
+        "เชียงใหม่"
+      ]
+    },
+    {
+      "source": "บริษัท ศักดิ์ทองพูน จำกัด",
+      "target": "ห้างหุ้นส่วนจำกัด ทัศนีย์การช่าง",
+      "competed_times": 1,
+      "agencies_involved": [
+        "มหาวิทยาลัยแม่โจ้"
+      ],
+      "provinces_involved": [
+        "เชียงใหม่"
+      ]
+    },
+    {
+      "source": "บริษัท ศักดิ์ทองพูน จำกัด",
+      "target": "กิจการร่วมค้า พัฒนา กรุ๊ป",
+      "competed_times": 1,
+      "agencies_involved": [
+        "มหาวิทยาลัยแม่โจ้"
+      ],
+      "provinces_involved": [
+        "เชียงใหม่"
+      ]
+    },
+    {
+      "source": "บริษัท ศักดิ์ทองพูน จำกัด",
+      "target": "กิจการร่วมค้า ซีเอ็มบีเค คอนสตรัคชั่น",
+      "competed_times": 1,
+      "agencies_involved": [
+        "มหาวิทยาลัยแม่โจ้"
+      ],
+      "provinces_involved": [
+        "เชียงใหม่"
+      ]
+    },
+    {
+      "source": "บริษัท เมโทรโปรเฟสชั่นแนลโปรดักส์ จำกัด",
+      "target": "บริษัท ไวร์เออ แอนด์ ไวร์เลส จำกัด",
+      "competed_times": 2,
+      "agencies_involved": [
+        "สำนักงานคณะกรรมการการศึกษาขั้นพื้นฐาน"
+      ],
+      "provinces_involved": [
+        "ประจวบคีรีขันธ์",
+        "พังงา"
+      ]
+    },
+    {
+      "source": "บริษัท ไทยวอเตอร์ เอ็นจิเนียริ่ง จำกัด",
+      "target": "บริษัท รุ่งวิจิตรการช่าง จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมทรัพยากรน้ำบาดาล"
+      ],
+      "provinces_involved": [
+        "นครราชสีมา"
+      ]
+    },
+    {
+      "source": "บริษัท ซิโนพาวเวอร์ จำกัด",
+      "target": "บริษัท เอสซีจี คลีนเนอร์ยี่ จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "มหาวิทยาลัยอุบลราชธานี"
+      ],
+      "provinces_involved": [
+        "อุบลราชธานี"
+      ]
+    },
+    {
+      "source": "บริษัท ซิโนพาวเวอร์ จำกัด",
+      "target": "บริษัท ยูวีบีจีพี คลีน เอ็นเนอร์ยี่ จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "มหาวิทยาลัยอุบลราชธานี"
+      ],
+      "provinces_involved": [
+        "อุบลราชธานี"
+      ]
+    },
+    {
+      "source": "บริษัท ซิโนพาวเวอร์ จำกัด",
+      "target": "บริษัท เอกรัฐวิศวกรรม จำกัด (มหาชน)",
+      "competed_times": 1,
+      "agencies_involved": [
+        "มหาวิทยาลัยอุบลราชธานี"
+      ],
+      "provinces_involved": [
+        "อุบลราชธานี"
+      ]
+    },
+    {
+      "source": "บริษัท ซิโนพาวเวอร์ จำกัด",
+      "target": "บริษัท ปตท. น้ำมันและการค้าปลีก จำกัด (มหาชน)",
+      "competed_times": 1,
+      "agencies_involved": [
+        "มหาวิทยาลัยอุบลราชธานี"
+      ],
+      "provinces_involved": [
+        "อุบลราชธานี"
+      ]
+    },
+    {
+      "source": "เอสไอ คอนซอเตียม",
+      "target": "บริษัท แอ็ดวานซ์อินฟอร์เมชั่นเทคโนโลยี จำกัด (มหาชน)",
+      "competed_times": 1,
+      "agencies_involved": [
+        "สำนักงานคณะกรรมการการศึกษาขั้นพื้นฐาน"
+      ],
+      "provinces_involved": [
+        "อุบลราชธานี"
+      ]
+    },
+    {
+      "source": "บริษัท สุพรีม ดิสทิบิวชั่น จำกัด (มหาชน)",
+      "target": "บริษัท ไวร์เออ แอนด์ ไวร์เลส จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "สำนักงานคณะกรรมการการศึกษาขั้นพื้นฐาน"
+      ],
+      "provinces_involved": [
+        "ขอนแก่น"
+      ]
+    },
+    {
+      "source": "บริษัท ไทยวอเตอร์ เอ็นจิเนียริ่ง จำกัด",
+      "target": "บริษัท โรลลิ่ง คอนเซปต์ อินโนเวชั่น จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมทรัพยากรน้ำบาดาล"
+      ],
+      "provinces_involved": [
+        "นครราชสีมา"
+      ]
+    },
+    {
+      "source": "เอสไอ คอนซอเตียม",
+      "target": "บริษัท สุพรีม ดิสทิบิวชั่น จำกัด (มหาชน)",
+      "competed_times": 1,
+      "agencies_involved": [
+        "สำนักงานคณะกรรมการการศึกษาขั้นพื้นฐาน"
+      ],
+      "provinces_involved": [
+        "นครสวรรค์"
+      ]
+    },
+    {
+      "source": "บริษัท กิจการร่วมค้า ซี เอส ซี จำกัด",
+      "target": "บริษัท ล็อกซเล่ย์ จำกัด (มหาชน)",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมราชทัณฑ์"
+      ],
+      "provinces_involved": [
+        "นนทบุรี"
+      ]
+    },
+    {
+      "source": "บริษัท กิจการร่วมค้า ซี เอส ซี จำกัด",
+      "target": "ห้างหุ้นส่วนจำกัด ส.ฤดีทรงธรรมร่วมกิจ และ บริษัท คอนสตรัคชั่น เอ็กคลูซีฟเนส จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมราชทัณฑ์"
+      ],
+      "provinces_involved": [
+        "นนทบุรี"
+      ]
+    },
+    {
+      "source": "กิจการร่วมค้า ที แอนด์ ที (2025)",
+      "target": "บริษัท กรุงธนเอนยิเนียร์ จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมชลประทาน"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "กิจการร่วมค้า ที แอนด์ ที (2025)",
+      "target": "ห้างหุ้นส่วนจำกัด น้ำก่ำก่อสร้าง",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมชลประทาน"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท โซลูชั่น เอ็กซ์เพิร์ท คอร์เปอเรชั่น จำกัด",
+      "target": "บริษัท ฟิวชั่น อินโนเวทีฟ จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "สำนักงานตำรวจแห่งชาติ"
+      ],
+      "provinces_involved": [
+        "สมุทรปราการ"
+      ]
+    },
+    {
+      "source": "บริษัท เอสวีโอเอ จำกัด (มหาชน)",
+      "target": "บริษัท สุพรีม ดิสทิบิวชั่น จำกัด (มหาชน)",
+      "competed_times": 7,
+      "agencies_involved": [
+        "สำนักงานคณะกรรมการการศึกษาขั้นพื้นฐาน"
+      ],
+      "provinces_involved": [
+        "ปทุมธานี",
+        "ลำปาง",
+        "ฉะเชิงเทรา",
+        "กำแพงเพชร",
+        "นราธิวาส",
+        "นนทบุรี",
+        "นครพนม"
+      ]
+    },
+    {
+      "source": "บริษัท นครชัยแอร์ จำกัด",
+      "target": "กิจการค้าร่วม ทียู",
+      "competed_times": 1,
+      "agencies_involved": [
+        "องค์การขนส่งมวลชนกรุงเทพ"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท สุพรีม ดิสทิบิวชั่น จำกัด (มหาชน)",
+      "target": "บริษัท โปรเฟสชั่นแนล เซอร์วิส แอนด์ โซลูชั่น จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "สำนักงานคณะกรรมการการศึกษาขั้นพื้นฐาน"
+      ],
+      "provinces_involved": [
+        "กาฬสินธุ์"
+      ]
+    },
+    {
+      "source": "บริษัท เอเซียเมท จำกัด",
+      "target": "บริษัท จีโนแมทช์ จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมอุตุนิยมวิทยา"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท เอเซียเมท จำกัด",
+      "target": "บริษัท ไนท แอคเซ็ส จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมอุตุนิยมวิทยา"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท เอเซียเมท จำกัด",
+      "target": "บริษัท คอมมิวนิเคชั่น แอนด์ ซิสเต็มส์ โซลูชั่น จำกัด (มหาชน)",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมอุตุนิยมวิทยา"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "ห้างหุ้นส่วนจำกัด เจ วี ซี ก่อสร้าง",
+      "target": "บริษัท โกศลสถาปัตย์ จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมทรัพยากรน้ำ"
+      ],
+      "provinces_involved": [
+        "ราชบุรี"
+      ]
+    },
+    {
+      "source": "ห้างหุ้นส่วนจำกัด เจ วี ซี ก่อสร้าง",
+      "target": "ห้างหุ้นส่วนจำกัด โชคสุชินคอนสตรัคชั่น",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมทรัพยากรน้ำ"
+      ],
+      "provinces_involved": [
+        "ราชบุรี"
+      ]
+    },
+    {
+      "source": "บริษัท ไอเอสโอ เอ็นจิเนียริ่ง จำกัด",
+      "target": "บริษัท เอ็นแอล ดีเวลลอปเมนต์ จำกัด (มหาชน)",
+      "competed_times": 1,
+      "agencies_involved": [
+        "มหาวิทยาลัยเชียงใหม่"
+      ],
+      "provinces_involved": [
+        "เชียงใหม่"
+      ]
+    },
+    {
+      "source": "บริษัท ไอเอสโอ เอ็นจิเนียริ่ง จำกัด",
+      "target": "บริษัท เอ็นพี เอ็นจิเนียริ่ง คอร์ปอเรชั่น จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "มหาวิทยาลัยเชียงใหม่"
+      ],
+      "provinces_involved": [
+        "เชียงใหม่"
+      ]
+    },
+    {
+      "source": "บริษัท เอ็มโอที  สมาร์ท โซลูชั่นส์ จำกัด",
+      "target": "บริษัท ย่งไทยรับเบอร์ จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กองบัญชาการกองทัพไทย"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท เอ็มโอที  สมาร์ท โซลูชั่นส์ จำกัด",
+      "target": "บริษัท ฟิโก้ เทคโนโลยี แอนด์ เอ็นจิเนียริ่ง จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กองบัญชาการกองทัพไทย"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท บาราน (ไทยแลนด์)  จำกัด",
+      "target": "บริษัท ทีฆทัศน์ ดีเวลลอปเมนท์ จำกัด (มหาชน)",
+      "competed_times": 1,
+      "agencies_involved": [
+        "มหาวิทยาลัยแม่ฟ้าหลวง"
+      ],
+      "provinces_involved": [
+        "เชียงราย"
+      ]
+    },
+    {
+      "source": "บริษัท บาราน (ไทยแลนด์)  จำกัด",
+      "target": "กิจการร่วมค้า ชุมราษฎร์ วิศวกรรม SIRI",
+      "competed_times": 1,
+      "agencies_involved": [
+        "มหาวิทยาลัยแม่ฟ้าหลวง"
+      ],
+      "provinces_involved": [
+        "เชียงราย"
+      ]
+    },
+    {
+      "source": "บริษัทมหาชนจำกัด บริษัท ไลท์อัพ โทเทิล โซลูชั่น จำกัด (มหาชน)(สัญญากิจการค้าร่วม)",
+      "target": "บริษัท สุพรีม ดิสทิบิวชั่น จำกัด (มหาชน)",
+      "competed_times": 1,
+      "agencies_involved": [
+        "สำนักงานคณะกรรมการการศึกษาขั้นพื้นฐาน"
+      ],
+      "provinces_involved": [
+        "สุโขทัย"
+      ]
+    },
+    {
+      "source": "บริษัทมหาชนจำกัด บริษัท ไลท์อัพ โทเทิล โซลูชั่น จำกัด (มหาชน)(สัญญากิจการค้าร่วม)",
+      "target": "แอลทีเอสวี คอนซอร์เทียม",
+      "competed_times": 1,
+      "agencies_involved": [
+        "สำนักงานคณะกรรมการการศึกษาขั้นพื้นฐาน"
+      ],
+      "provinces_involved": [
+        "สุโขทัย"
+      ]
+    },
+    {
+      "source": "สหกรณ์การเกษตรเวียงป่าเป้า จำกัด",
+      "target": "องค์การคลังสินค้า",
+      "competed_times": 2,
+      "agencies_involved": [
+        "กรมราชทัณฑ์"
+      ],
+      "provinces_involved": [
+        "เชียงใหม่"
+      ]
+    },
+    {
+      "source": "สหกรณ์การเกษตรเวียงป่าเป้า จำกัด",
+      "target": "องค์การตลาด กระทรวงมหาดไทย",
+      "competed_times": 2,
+      "agencies_involved": [
+        "กรมราชทัณฑ์"
+      ],
+      "provinces_involved": [
+        "เชียงใหม่"
+      ]
+    },
+    {
+      "source": "บริษัท ตั้งเจริญ จำกัด",
+      "target": "บริษัท ชัยเจริญไมตรี จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมชลประทาน"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท ตั้งเจริญ จำกัด",
+      "target": "ห้างหุ้นส่วนจำกัด ไทยเจริญศรีสะเกษ",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมชลประทาน"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท ไวร์เออ แอนด์ ไวร์เลส จำกัด",
+      "target": "บริษัท แอ็ดวานซ์อินฟอร์เมชั่นเทคโนโลยี จำกัด (มหาชน)",
+      "competed_times": 1,
+      "agencies_involved": [
+        "สำนักงานคณะกรรมการการศึกษาขั้นพื้นฐาน"
+      ],
+      "provinces_involved": [
+        "ร้อยเอ็ด"
+      ]
+    },
+    {
+      "source": "บริษัท นิยมพานิช จำกัด",
+      "target": "กิจการค้าร่วมเอสวีดับบลิว",
+      "competed_times": 1,
+      "agencies_involved": [
+        "สำนักงานคณะกรรมการการศึกษาขั้นพื้นฐาน"
+      ],
+      "provinces_involved": [
+        "แม่ฮ่องสอน"
+      ]
+    },
+    {
+      "source": "บริษัท พุทธเตชะ จำกัด",
+      "target": "กิจการร่วมค้า ชุมราษฎร์ วิศวกรรม SIRI",
+      "competed_times": 1,
+      "agencies_involved": [
+        "มหาวิทยาลัยเทคโนโลยีราชมงคลอีสาน"
+      ],
+      "provinces_involved": [
+        "นครราชสีมา"
+      ]
+    },
+    {
+      "source": "กิจการร่วมค้าเอสเคทีอินเทค-ซีทีซี",
+      "target": "กิจการร่วมค้า ชุมราษฎร์ วิศวกรรม SIRI",
+      "competed_times": 1,
+      "agencies_involved": [
+        "องค์การบริหารส่วนตำบลบางบ่อ"
+      ],
+      "provinces_involved": [
+        "สมุทรปราการ"
+      ]
+    },
+    {
+      "source": "บริษัท เพาเวอร์ไลน์ เอ็นจิเนียริ่ง จำกัด (มหาชน)",
+      "target": "บริษัท เฟิร์ส เทคโนโลยี่ จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "มหาวิทยาลัยเชียงใหม่"
+      ],
+      "provinces_involved": [
+        "เชียงใหม่"
+      ]
+    },
+    {
+      "source": "บริษัท เพาเวอร์ไลน์ เอ็นจิเนียริ่ง จำกัด (มหาชน)",
+      "target": "บริษัท ไอเอสโอ เอ็นจิเนียริ่ง จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "มหาวิทยาลัยเชียงใหม่"
+      ],
+      "provinces_involved": [
+        "เชียงใหม่"
+      ]
+    },
+    {
+      "source": "บริษัท เพาเวอร์ไลน์ เอ็นจิเนียริ่ง จำกัด (มหาชน)",
+      "target": "บริษัท เอ็นแอล ดีเวลลอปเมนต์ จำกัด (มหาชน)",
+      "competed_times": 1,
+      "agencies_involved": [
+        "มหาวิทยาลัยเชียงใหม่"
+      ],
+      "provinces_involved": [
+        "เชียงใหม่"
+      ]
+    },
+    {
+      "source": "ห้างหุ้นส่วนจำกัด แทคติคอล โซลูชั่น",
+      "target": "บริษัท ฟิกซ์เทค จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "สำนักงานตำรวจแห่งชาติ"
+      ],
+      "provinces_involved": [
+        "ยะลา"
+      ]
+    },
+    {
+      "source": "ห้างหุ้นส่วนจำกัด แทคติคอล โซลูชั่น",
+      "target": "บริษัท อาร์ทีแอล อีควิปเม้นท์ จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "สำนักงานตำรวจแห่งชาติ"
+      ],
+      "provinces_involved": [
+        "ยะลา"
+      ]
+    },
+    {
+      "source": "บริษัท ไวร์เออ แอนด์ ไวร์เลส จำกัด",
+      "target": "บริษัท แอพเวิร์คส์  จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "สำนักงานคณะกรรมการการศึกษาขั้นพื้นฐาน"
+      ],
+      "provinces_involved": [
+        "ชลบุรี"
+      ]
+    },
+    {
+      "source": "บริษัท อุดมศักดิ์ เชียงใหม่ จำกัด",
+      "target": "บริษัท อสิตากิจ จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมทางหลวง"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท อุดมศักดิ์ เชียงใหม่ จำกัด",
+      "target": "บริษัท เชียงรายแลนด์ แอสโซซิเอทส์ จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมทางหลวง"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท ไวร์เออ แอนด์ ไวร์เลส จำกัด",
+      "target": "บริษัท เบลสสกาย คอนเนคชั่น จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "สำนักงานคณะกรรมการการศึกษาขั้นพื้นฐาน"
+      ],
+      "provinces_involved": [
+        "กาญจนบุรี"
+      ]
+    },
+    {
+      "source": "บริษัท ซีเอ็นเอ็น การโยธา จำกัด",
+      "target": "บริษัท เอส เอส ไอ ดีเวลลอปเม้นท์ จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "สำนักงานปลัดกระทรวงสาธารณสุข"
+      ],
+      "provinces_involved": [
+        "กำแพงเพชร"
+      ]
+    },
+    {
+      "source": "บริษัท ซีเอ็นเอ็น การโยธา จำกัด",
+      "target": "บริษัท วรรณรัช พัฒนา จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "สำนักงานปลัดกระทรวงสาธารณสุข"
+      ],
+      "provinces_involved": [
+        "กำแพงเพชร"
+      ]
+    },
+    {
+      "source": "บริษัท ซีเอ็นเอ็น การโยธา จำกัด",
+      "target": "กิจการร่วมค้า ชุมราษฎร์ วิศวกรรม SIRI",
+      "competed_times": 1,
+      "agencies_involved": [
+        "สำนักงานปลัดกระทรวงสาธารณสุข"
+      ],
+      "provinces_involved": [
+        "กำแพงเพชร"
+      ]
+    },
+    {
+      "source": "บริษัทมหาชนจำกัด บริษัท อินฟอร์เมชั่น แอนด์ คอมมิวนิเคชั่น เน็ทเวิร์คส จำกัด (มหาชน)(สัญญากิจการค้าร่วม)",
+      "target": "บริษัท แอ็ดวานซ์อินฟอร์เมชั่นเทคโนโลยี จำกัด (มหาชน)",
+      "competed_times": 1,
+      "agencies_involved": [
+        "สำนักงานคณะกรรมการการศึกษาขั้นพื้นฐาน"
+      ],
+      "provinces_involved": [
+        "สกลนคร"
+      ]
+    },
+    {
+      "source": "บริษัท ไร้ท์ทันเน็ลลิ่ง จำกัด (มหาชน)",
+      "target": "บริษัท ซิโน-ไทย เอ็นจีเนียริ่ง แอนด์ คอนสตรัคชั่น จำกัด (มหาชน)",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมชลประทาน"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท หรรษนันท์ พร็อบเพอร์ตี้ จำกัด",
+      "target": "กิจการร่วมค้า เอ็ม.อี.ซี.ไทยอีสาน",
+      "competed_times": 1,
+      "agencies_involved": [
+        "สำนักงานคณะกรรมการการศึกษาขั้นพื้นฐาน"
+      ],
+      "provinces_involved": [
+        "กำแพงเพชร"
+      ]
+    },
+    {
+      "source": "กิจการค้าร่วม เอชแอนด์ที",
+      "target": "บริษัท โปรเฟสชั่นแนล เซอร์วิส แอนด์ โซลูชั่น จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "สำนักงานคณะกรรมการการศึกษาขั้นพื้นฐาน"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "กิจการค้าร่วม เอชแอนด์ที",
+      "target": "บริษัท ฟอร์ท คอร์ปอเรชั่น จำกัด (มหาชน)",
+      "competed_times": 1,
+      "agencies_involved": [
+        "สำนักงานคณะกรรมการการศึกษาขั้นพื้นฐาน"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "กิจการค้าร่วม เอชแอนด์ที",
+      "target": "บริษัท อินเตอร์ลิ้งค์ เทเลคอม จำกัด (มหาชน)",
+      "competed_times": 1,
+      "agencies_involved": [
+        "สำนักงานคณะกรรมการการศึกษาขั้นพื้นฐาน"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "กิจการค้าร่วม เอสแอนด์พี",
+      "target": "บริษัท กอริลลา เทคโนโลยี (ประเทศไทย) จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "สำนักงานคณะกรรมการการศึกษาขั้นพื้นฐาน"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "กิจการค้าร่วม เอสแอนด์พี",
+      "target": "กิจการค้าร่วมล็อกซเล่ย์-อินเตอร์ลิ้งค์คอนโซเตียม",
+      "competed_times": 1,
+      "agencies_involved": [
+        "สำนักงานคณะกรรมการการศึกษาขั้นพื้นฐาน"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท เวิลด์ กรุ๊ป เอ็นจิเนียริ่ง จำกัด",
+      "target": "บริษัท กรีนทั้มบ์ จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "เทศบาลตำบลบางพระ"
+      ],
+      "provinces_involved": [
+        "ชลบุรี"
+      ]
+    },
+    {
+      "source": "บริษัท เวิลด์ กรุ๊ป เอ็นจิเนียริ่ง จำกัด",
+      "target": "ห้างหุ้นส่วนจำกัด เจริญชัยชลบุรีก่อสร้าง",
+      "competed_times": 1,
+      "agencies_involved": [
+        "เทศบาลตำบลบางพระ"
+      ],
+      "provinces_involved": [
+        "ชลบุรี"
+      ]
+    },
+    {
+      "source": "บริษัท ซุ่นเฮงก่อสร้าง จำกัด",
+      "target": "ห้างหุ้นส่วนจำกัด หาดใหญ่สรรพกิจก่อสร้าง",
+      "competed_times": 1,
+      "agencies_involved": [
+        "มหาวิทยาลัยทักษิณ"
+      ],
+      "provinces_involved": [
+        "สงขลา"
+      ]
+    },
+    {
+      "source": "บริษัท ซุ่นเฮงก่อสร้าง จำกัด",
+      "target": "บริษัท เพิ่มพูนวิศวกรรม จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "มหาวิทยาลัยทักษิณ"
+      ],
+      "provinces_involved": [
+        "สงขลา"
+      ]
+    },
+    {
+      "source": "บริษัท ซุ่นเฮงก่อสร้าง จำกัด",
+      "target": "กิจการร่วมค้า ชุมราษฎร์ วิศวกรรม SIRI",
+      "competed_times": 1,
+      "agencies_involved": [
+        "มหาวิทยาลัยทักษิณ"
+      ],
+      "provinces_involved": [
+        "สงขลา"
+      ]
+    },
+    {
+      "source": "บริษัท ซุ่นเฮงก่อสร้าง จำกัด",
+      "target": "\"บีจีซี\",\"143702078.80",
+      "competed_times": 1,
+      "agencies_involved": [
+        "มหาวิทยาลัยทักษิณ"
+      ],
+      "provinces_involved": [
+        "สงขลา"
+      ]
+    },
+    {
+      "source": "กิจการร่วมค้า GLG",
+      "target": "บริษัท เอ็ม.ซี.คอนสตรัคชั่น (1979) จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "องค์การบริหารส่วนจังหวัดสมุทรปราการ"
+      ],
+      "provinces_involved": [
+        "สมุทรปราการ"
+      ]
+    },
+    {
+      "source": "บริษัท อิตาเลียนไทย ดีเวล๊อปเมนต์ จำกัด (มหาชน)",
+      "target": "บริษัท กิจการร่วมค้า รอยเตอร์ แอนด์ ไดเบ้า จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "การไฟฟ้าฝ่ายผลิตแห่งประเทศไทย"
+      ],
+      "provinces_involved": [
+        "ลำปาง"
+      ]
+    },
+    {
+      "source": "บริษัท ประยูรวิศว์ จำกัด",
+      "target": "บริษัท พรรณีวรกิจก่อสร้างและขนส่ง จำกัด",
+      "competed_times": 2,
+      "agencies_involved": [
+        "กรมทางหลวง"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท ประยูรวิศว์ จำกัด",
+      "target": "บริษัท บี ซี ดี ซี จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมทางหลวง"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท เมืองสะอาด จำกัด",
+      "target": "บริษัท เอิกพงษ์ จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "เทศบาลนครนนทบุรี"
+      ],
+      "provinces_involved": [
+        "นนทบุรี"
+      ]
+    },
+    {
+      "source": "บริษัท ซีเอสเอส เมดิคอล จำกัด",
+      "target": "บริษัท มหานคร  เมดิคัล  เซ็นเตอร์ จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "เมืองพัทยา"
+      ],
+      "provinces_involved": [
+        "ชลบุรี"
+      ]
+    },
+    {
+      "source": "บริษัท วี.สถาปัตย์ จำกัด",
+      "target": "บริษัท ไอเอสโอ เอ็นจิเนียริ่ง จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "โรงพยาบาลนครพิงค์"
+      ],
+      "provinces_involved": [
+        "เชียงใหม่"
+      ]
+    },
+    {
+      "source": "บริษัท วี.สถาปัตย์ จำกัด",
+      "target": "บริษัท เอ็นแอล ดีเวลลอปเมนต์ จำกัด (มหาชน)",
+      "competed_times": 1,
+      "agencies_involved": [
+        "โรงพยาบาลนครพิงค์"
+      ],
+      "provinces_involved": [
+        "เชียงใหม่"
+      ]
+    },
+    {
+      "source": "กิจการร่วมค้า ลำปางไพศาล และโอเบการก่อสร้าง",
+      "target": "กิจการร่วมค้า เอ็ม.อี.ซี.ไทยอีสาน",
+      "competed_times": 1,
+      "agencies_involved": [
+        "สำนักงานคณะกรรมการการศึกษาขั้นพื้นฐาน"
+      ],
+      "provinces_involved": [
+        "สุพรรณบุรี"
+      ]
+    },
+    {
+      "source": "บริษัท ส.การโยธา 1993 จำกัด",
+      "target": "บริษัท เลิศพัฒนาคอนสตรัคชั่น จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "โรงพยาบาลกันทรลักษ์"
+      ],
+      "provinces_involved": [
+        "ศรีสะเกษ"
+      ]
+    },
+    {
+      "source": "บริษัท กรีนเทค ออโต้ จำกัด",
+      "target": "บริษัท แสงฟ้าอีซูซุเซลส์ จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมป้องกันและบรรเทาสาธารณภัย"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท กรีนเทค ออโต้ จำกัด",
+      "target": "บริษัท อึ้งธนสุวรรณสตึก จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมป้องกันและบรรเทาสาธารณภัย"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "ห้างหุ้นส่วนจำกัด สี่แสงโยธาการ",
+      "target": "บริษัท ซีวิล คอนสตรัคชั่น เซอร์วิสเซส แอนด์ โปรดักส์ จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมทางหลวง"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "ห้างหุ้นส่วนจำกัด สี่แสงโยธาการ",
+      "target": "บริษัท คริสเตียนีและนีลเส็น (ไทย) จำกัด (มหาชน)",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมทางหลวง"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท ประยูรวิศว์ จำกัด",
+      "target": "บริษัท ช. ทวีก่อสร้าง จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมทางหลวง"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท เสริมสงวนก่อสร้าง จำกัด",
+      "target": "บริษัท เอ.เอส.แอสโซซิเอท เอนยิเนียริ่ง (1964) จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมทางหลวง"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท เสริมสงวนก่อสร้าง จำกัด",
+      "target": "บริษัท เค.อาร์.ซี.เอ็นจิเนียริ่ง  จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมทางหลวง"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท วิจิตรภัณฑ์ก่อสร้าง จำกัด",
+      "target": "บริษัท ประยูรวิศว์ จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมทางหลวง"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท วิจิตรภัณฑ์ก่อสร้าง จำกัด",
+      "target": "บริษัท วนิชชัยก่อสร้าง(1979) จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมทางหลวง"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "กิจการร่วมค้า วีแอนด์เค",
+      "target": "บริษัท วนิชชัยก่อสร้าง(1979) จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมทางหลวง"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "กิจการร่วมค้า วีแอนด์เค",
+      "target": "บริษัท เชียงใหม่คอนสตรัคชั่น จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมทางหลวง"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท ศูนย์ทดสอบแบตเตอรี่ ยานยนต์ไฟฟ้า และ ผลิตภัณฑ์อิเล็กทรอนิกส์ จำกัด",
+      "target": "บริษัท ภูดิศณ์เทค จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "สำนักงานพัฒนาวิทยาศาสตร์และเทคโนโลยีแห่งชาติ"
+      ],
+      "provinces_involved": [
+        "ปทุมธานี"
+      ]
+    },
+    {
+      "source": "บริษัท ศูนย์ทดสอบแบตเตอรี่ ยานยนต์ไฟฟ้า และ ผลิตภัณฑ์อิเล็กทรอนิกส์ จำกัด",
+      "target": "บริษัท เนชั่นแนล ไดเร็ค เน็ทเวิร์ค จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "สำนักงานพัฒนาวิทยาศาสตร์และเทคโนโลยีแห่งชาติ"
+      ],
+      "provinces_involved": [
+        "ปทุมธานี"
+      ]
+    },
+    {
+      "source": "บริษัท พุทธเตชะ จำกัด",
+      "target": "บริษัท อาคาร 33 จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "โรงพยาบาลสมเด็จพระพุทธเลิศหล้า"
+      ],
+      "provinces_involved": [
+        "สมุทรสงคราม"
+      ]
+    },
+    {
+      "source": "บริษัท พุทธเตชะ จำกัด",
+      "target": "บริษัท สุทัศน์วิศวการ (1994) จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "โรงพยาบาลสมเด็จพระพุทธเลิศหล้า"
+      ],
+      "provinces_involved": [
+        "สมุทรสงคราม"
+      ]
+    },
+    {
+      "source": "บริษัท พุทธเตชะ จำกัด",
+      "target": "บริษัท ไพศาลกิจซิสเต็ม จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "โรงพยาบาลสมเด็จพระพุทธเลิศหล้า"
+      ],
+      "provinces_involved": [
+        "สมุทรสงคราม"
+      ]
+    },
+    {
+      "source": "บริษัท พุทธเตชะ จำกัด",
+      "target": "บริษัท งามวงศ์วานการช่าง จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "โรงพยาบาลสมเด็จพระพุทธเลิศหล้า"
+      ],
+      "provinces_involved": [
+        "สมุทรสงคราม"
+      ]
+    },
+    {
+      "source": "บริษัท วงษ์สยามก่อสร้าง จำกัด",
+      "target": "บริษัท บางแสนมหานคร จำกัด",
+      "competed_times": 3,
+      "agencies_involved": [
+        "เทศบาลนครนครราชสีมา",
+        "การประปาส่วนภูมิภาค"
+      ],
+      "provinces_involved": [
+        "นครราชสีมา",
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท ยิบอินซอย จำกัด",
+      "target": "บริษัท แอ็ดวานซ์อินฟอร์เมชั่นเทคโนโลยี จำกัด (มหาชน)",
+      "competed_times": 1,
+      "agencies_involved": [
+        "สำนักงานตำรวจแห่งชาติ"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท ยิบอินซอย จำกัด",
+      "target": "บริษัท อินฟอร์เมชั่น แอนด์ คอมมิวนิเคชั่น เน็ทเวิร์คส จำกัด (มหาชน)",
+      "competed_times": 1,
+      "agencies_involved": [
+        "สำนักงานตำรวจแห่งชาติ"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท ยิบอินซอย จำกัด",
+      "target": "ยูซีไอ ไฮโดรควิพ",
+      "competed_times": 1,
+      "agencies_involved": [
+        "สำนักงานตำรวจแห่งชาติ"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท จักรวาลคอมมิวนิเคชั่น ซีสเท็ม จำกัด",
+      "target": "บริษัท ร็อคเวล ออโตเมชั่น ไทย จำกัด (ผ่าน บริษัท เน็กซ์เตอร์ แอร์โรสเปซ แอนด์ มารีน จำกัด)",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กองทัพเรือ"
+      ],
+      "provinces_involved": [
+        "สมุทรปราการ"
+      ]
+    },
+    {
+      "source": "บริษัท จักรวาลคอมมิวนิเคชั่น ซีสเท็ม จำกัด",
+      "target": "บริษัท กฤษณะโกลบอล จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กองทัพเรือ"
+      ],
+      "provinces_involved": [
+        "สมุทรปราการ"
+      ]
+    },
+    {
+      "source": "บริษัท จักรวาลคอมมิวนิเคชั่น ซีสเท็ม จำกัด",
+      "target": "บริษัท Wartsila Lyngso Marine A/S (ผ่าน บริษัท ส.พร้อมไพบูลย์ แอ๊สโซซิเอท (2528) จำกัด)",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กองทัพเรือ"
+      ],
+      "provinces_involved": [
+        "สมุทรปราการ"
+      ]
+    },
+    {
+      "source": "บริษัท โรงพยาบาลจุฬารัตน์ จำกัด (มหาชน)",
+      "target": "บริษัท พลัส เฮลท์ จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "โรงพยาบาลสมุทรปราการ"
+      ],
+      "provinces_involved": [
+        "สมุทรปราการ"
+      ]
+    },
+    {
+      "source": "บริษัท วงษ์สยามก่อสร้าง จำกัด",
+      "target": "บริษัท ไดนามิค กรุ๊ป โปรดักส์ จำกัด",
+      "competed_times": 2,
+      "agencies_involved": [
+        "การประปาส่วนภูมิภาค"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "ห้างหุ้นส่วนจำกัด ส.ฤดีทรงธรรมร่วมกิจ และ บริษัท คอนสตรัคชั่น เอ็กคลูซีฟเนส จำกัด",
+      "target": "บริษัท ดิอาคิเท็คส์ แอนด์ เทิร์นคีย์ จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมราชทัณฑ์"
+      ],
+      "provinces_involved": [
+        "นนทบุรี"
+      ]
+    },
+    {
+      "source": "ห้างหุ้นส่วนจำกัด ส.ฤดีทรงธรรมร่วมกิจ และ บริษัท คอนสตรัคชั่น เอ็กคลูซีฟเนส จำกัด",
+      "target": "บริษัท ล็อกซเล่ย์ จำกัด (มหาชน)",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมราชทัณฑ์"
+      ],
+      "provinces_involved": [
+        "นนทบุรี"
+      ]
+    },
+    {
+      "source": "บริษัท บอสเวลล์ คอนเนคชั่น กรุ๊ป จำกัด",
+      "target": "บริษัท ระยองวิศวกรรมและซ่อมบำรุง จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "บริษัท ท่าอากาศยานไทย จำกัด (มหาชน)"
+      ],
+      "provinces_involved": [
+        "สมุทรปราการ"
+      ]
+    },
+    {
+      "source": "บริษัท บอสเวลล์ คอนเนคชั่น กรุ๊ป จำกัด",
+      "target": "บริษัท ชำนาญกิจ วิศวกรรม จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "บริษัท ท่าอากาศยานไทย จำกัด (มหาชน)"
+      ],
+      "provinces_involved": [
+        "สมุทรปราการ"
+      ]
+    },
+    {
+      "source": "บริษัท บอสเวลล์ คอนเนคชั่น กรุ๊ป จำกัด",
+      "target": "บริษัท ษฎา วิศวกรรม จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "บริษัท ท่าอากาศยานไทย จำกัด (มหาชน)"
+      ],
+      "provinces_involved": [
+        "สมุทรปราการ"
+      ]
+    },
+    {
+      "source": "บริษัท วัฒโนชาการก่อสร้าง จำกัด",
+      "target": "บริษัท เวิลด์ เดสคอน จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "องค์การบริหารส่วนตำบลคลองสาม"
+      ],
+      "provinces_involved": [
+        "ปทุมธานี"
+      ]
+    },
+    {
+      "source": "บริษัท วิบูลย์โชค จำกัด",
+      "target": "บริษัท วงษ์สยามก่อสร้าง จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "การประปาส่วนภูมิภาค"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท วิบูลย์โชค จำกัด",
+      "target": "บริษัท ไว-วา จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "การประปาส่วนภูมิภาค"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท ท่าราบก่อสร้าง จำกัด",
+      "target": "บริษัท พีระมิดคอนกรีต จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมทางหลวง"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท ท่าราบก่อสร้าง จำกัด",
+      "target": "บริษัท ทองมาคอนแทรคเตอร์ จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมทางหลวง"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท กรีนไลท์ อินเตอร์เนชั่นแนล จำกัด",
+      "target": "บริษัท สี่แสงการโยธา(1979) จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมทางหลวง"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท กรีนไลท์ อินเตอร์เนชั่นแนล จำกัด",
+      "target": "บริษัท พรรณีวรกิจก่อสร้างและขนส่ง จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมทางหลวง"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท ซีวิลเอนจีเนียริง จำกัด (มหาชน)",
+      "target": "บริษัท กรุงธนเอนยิเนียร์ จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมทางหลวง"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท ซีวิลเอนจีเนียริง จำกัด (มหาชน)",
+      "target": "บริษัท บี ซี ดี ซี จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมทางหลวง"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท ซีวิลเอนจีเนียริง จำกัด (มหาชน)",
+      "target": "บริษัท ทองมาคอนแทรคเตอร์ จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมทางหลวง"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท ซีวิลเอนจีเนียริง จำกัด (มหาชน)",
+      "target": "ห้างหุ้นส่วนจำกัด สี่แสงโยธาการ",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมทางหลวง"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท ซีวิลเอนจีเนียริง จำกัด (มหาชน)",
+      "target": "บริษัท บุญสหะการสร้าง จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมทางหลวง"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท ซีวิลเอนจีเนียริง จำกัด (มหาชน)",
+      "target": "บริษัท แสงชัยโชค จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมทางหลวง"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท สี่แสงการโยธา(1979) จำกัด",
+      "target": "บริษัท กรีนไลท์ อินเตอร์เนชั่นแนล จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมทางหลวง"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท สี่แสงการโยธา(1979) จำกัด",
+      "target": "บริษัท ไทยวัฒน์วิศวการทาง จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมทางหลวง"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัทจำกัด บริษัท ชอกมลรัตน์ จำกัด(สัญญากิจการค้าร่วม)",
+      "target": "บริษัท แสงชัยโชค จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมทางหลวง"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัทจำกัด บริษัท ชอกมลรัตน์ จำกัด(สัญญากิจการค้าร่วม)",
+      "target": "กิจการค้าร่วม บริษัท ธาราวัญ คอนสตรัคชั่น จำกัด และ บริษัท ชอกมลรัตน์ จำกัด และ บริษัท สุนิสาจุฬารัตน์การโยธา จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรมทางหลวง"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท ซีเอ็นเอ็น การโยธา  จำกัด",
+      "target": "บริษัท ซีซีเอส คอร์ปอเรชั่น  จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "โรงพยาบาลสุโขทัย"
+      ],
+      "provinces_involved": [
+        "สุโขทัย"
+      ]
+    },
+    {
+      "source": "บริษัท ซีเอ็นเอ็น การโยธา  จำกัด",
+      "target": "กิจการร่วมค้า เอ็ม.อี.ซี. ไทยอีสาน",
+      "competed_times": 1,
+      "agencies_involved": [
+        "โรงพยาบาลสุโขทัย"
+      ],
+      "provinces_involved": [
+        "สุโขทัย"
+      ]
+    },
+    {
+      "source": "บริษัท จักรราช คอนสตรัคชั่น จำกัด",
+      "target": "บริษัท เอ็ม อี อี จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "โรงพยาบาลชัยบาดาล"
+      ],
+      "provinces_involved": [
+        "ลพบุรี"
+      ]
+    },
+    {
+      "source": "บริษัท จักรราช คอนสตรัคชั่น จำกัด",
+      "target": "บริษัท สยามสกุลช่าง จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "โรงพยาบาลชัยบาดาล"
+      ],
+      "provinces_involved": [
+        "ลพบุรี"
+      ]
+    },
+    {
+      "source": "บริษัท จักรราช คอนสตรัคชั่น จำกัด",
+      "target": "กิจการค้าร่วม FMA",
+      "competed_times": 1,
+      "agencies_involved": [
+        "โรงพยาบาลชัยบาดาล"
+      ],
+      "provinces_involved": [
+        "ลพบุรี"
+      ]
+    },
+    {
+      "source": "กิจการร่วมค้า LECC",
+      "target": "บริษัท จักรราช คอนสตรัคชั่น จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "โรงพยาบาลพิมาย"
+      ],
+      "provinces_involved": [
+        "นครราชสีมา"
+      ]
+    },
+    {
+      "source": "บริษัท วงษ์สยามก่อสร้าง จำกัด",
+      "target": "บริษัท ซิโน-ไทย เอ็นจีเนียริ่ง แอนด์ คอนสตรัคชั่น จำกัด (มหาชน)",
+      "competed_times": 1,
+      "agencies_involved": [
+        "การประปาส่วนภูมิภาค"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "กิจการร่วมค้า เอ็ม.อี.ซี.ไทยอีสาน",
+      "target": "บริษัท สุทัศน์วิศวการ (1994) จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "สำนักงานปลัดกระทรวงสาธารณสุข"
+      ],
+      "provinces_involved": [
+        "สกลนคร"
+      ]
+    },
+    {
+      "source": "กิจการร่วมค้า เอ็ม.อี.ซี.ไทยอีสาน",
+      "target": "บริษัท ชูไลท์ เอนจิเนียริ่ง จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "สำนักงานปลัดกระทรวงสาธารณสุข"
+      ],
+      "provinces_involved": [
+        "สกลนคร"
+      ]
+    },
+    {
+      "source": "กิจการร่วมค้า เอ็ม.อี.ซี.ไทยอีสาน",
+      "target": "บริษัท เลิศพัฒนาคอนสตรัคชั่น จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "สำนักงานปลัดกระทรวงสาธารณสุข"
+      ],
+      "provinces_involved": [
+        "สกลนคร"
+      ]
+    },
+    {
+      "source": "กิจการร่วมค้า เอ็ม.อี.ซี.ไทยอีสาน",
+      "target": "ห้างหุ้นส่วนจำกัด สกลรุ่งเรืองกิจวิศวกรรม",
+      "competed_times": 1,
+      "agencies_involved": [
+        "สำนักงานปลัดกระทรวงสาธารณสุข"
+      ],
+      "provinces_involved": [
+        "สกลนคร"
+      ]
+    },
+    {
+      "source": "กิจการร่วมค้า เอ็ม.อี.ซี.ไทยอีสาน",
+      "target": "บริษัท วี.สถาปัตย์ จำกัด",
+      "competed_times": 1,
+      "agencies_involved": [
+        "สำนักงานปลัดกระทรวงสาธารณสุข"
+      ],
+      "provinces_involved": [
+        "สกลนคร"
+      ]
+    },
+    {
+      "source": "กิจการค้าร่วม พีเอสพี แอนด์ ฟอร์ท",
+      "target": "i2All Consortium",
+      "competed_times": 1,
+      "agencies_involved": [
+        "การไฟฟ้าส่วนภูมิภาค"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    },
+    {
+      "source": "บริษัท อิตาเลียนไทย ดีเวล๊อปเมนต์ จำกัด (มหาชน)",
+      "target": "บริษัท ช.การช่าง จำกัด (มหาชน)",
+      "competed_times": 1,
+      "agencies_involved": [
+        "กรุงเทพมหานคร"
+      ],
+      "provinces_involved": [
+        "กรุงเทพมหานคร"
+      ]
+    }
+  ]
+};
 
-    <div id="tooltip"></div>
-    <div id="chart-container"></div>
 
-    <script>
-        // 1. เตรียมข้อมูลจำลอง (คุณสามารถเปลี่ยนตรงนี้ให้ดึงข้อมูลจาก API ของคุณได้)
-        const data = {
-            nodes: [
-                { id: "บริษัท A", group: 1 }, { id: "บริษัท B", group: 2 },
-                { id: "บริษัท C", group: 1 }, { id: "บริษัท D", group: 2 },
-                { id: "บริษัท E", group: 3 }
-            ],
-            links: [
-                { source: "บริษัท A", target: "บริษัท B", weight: 5 }, // แข่งกัน 5 ครั้ง
-                { source: "บริษัท A", target: "บริษัท C", weight: 2 },
-                { source: "บริษัท B", target: "บริษัท D", weight: 8 }, // แข่งกันบ่อยมาก
-                { source: "บริษัท C", target: "บริษัท E", weight: 1 },
-                { source: "บริษัท D", target: "บริษัท A", weight: 3 }
-            ]
+
+
+
+
+// ==========================================
+// 1. ระบบยุบรวมเส้นทับซ้อน (Merge Bi-directional Links)
+// ==========================================
+const mergedLinksMap = {};
+
+graphData.links.forEach(l => {
+    // หาชื่อบริษัททั้ง 2 ฝั่ง
+    const s = typeof l.source === 'object' ? l.source.id : l.source;
+    const t = typeof l.target === 'object' ? l.target.id : l.target;
+
+    // เรียงชื่อตามตัวอักษรเพื่อสร้าง Key กลาง (ไม่สนว่าใครเป็น Source/Target)
+    const pair = [s, t].sort();
+    const key = pair[0] + "|||" + pair[1];
+
+    if(!mergedLinksMap[key]) {
+        mergedLinksMap[key] = {
+            source: pair[0], 
+            target: pair[1],
+            total_competed: 0,
+            breakdown: {}, // เก็บสถิติว่าใครชนะกี่ครั้ง
+            agencies_involved: new Set(),
+            provinces_involved: new Set()
         };
+    }
 
-        // 2. ตั้งค่าขนาดของกราฟ
-        const width = window.innerWidth;
-        const height = window.innerHeight;
+    const mLink = mergedLinksMap[key];
+    mLink.total_competed += l.competed_times;
 
-        const svg = d3.select("#chart-container").append("svg")
-            .attr("width", "100%")
-            .attr("height", "100%")
-            .call(d3.zoom().on("zoom", (event) => { // ใส่ฟังก์ชัน Zoom
-                svgGroup.attr("transform", event.transform);
-            }));
+    // เก็บข้อมูลว่า Source ในข้อมูลดิบ (ซึ่งก็คือผู้ชนะ) ชนะกี่ครั้ง
+    if(!mLink.breakdown[s]) mLink.breakdown[s] = 0;
+    mLink.breakdown[s] += l.competed_times;
 
-        const svgGroup = svg.append("g");
-        const tooltip = d3.select("#tooltip");
+    // รวมหน่วยงานและจังหวัด
+    l.agencies_involved.forEach(a => mLink.agencies_involved.add(a));
+    l.provinces_involved.forEach(p => mLink.provinces_involved.add(p));
+});
 
-        // 3. สร้างระบบฟิสิกส์ (Force Simulation) ให้จุดกระจายตัว
-        const simulation = d3.forceSimulation(data.nodes)
-            .force("link", d3.forceLink(data.links).id(d => d.id).distance(150))
-            .force("charge", d3.forceManyBody().strength(-400))
-            .force("center", d3.forceCenter(width / 2, height / 2));
+// แปลงกลับเป็น Array เพื่อให้ D3 ใช้งาน
+const globalMergedLinks = Object.values(mergedLinksMap).map(m => ({
+    source: m.source,
+    target: m.target,
+    total_competed: m.total_competed,
+    breakdown: m.breakdown,
+    agencies_involved: Array.from(m.agencies_involved),
+    provinces_involved: Array.from(m.provinces_involved)
+}));
 
-        // 4. วาดเส้นเชื่อม (Edges)
-        const link = svgGroup.append("g")
-            .attr("class", "links")
-            .selectAll("line")
-            .data(data.links)
-            .enter().append("line")
-            .attr("class", "link")
-            .attr("stroke-width", d => Math.sqrt(d.weight) * 2); // ความหนาตามจำนวนครั้ง
+// ==========================================
+// 2. ระบบวาดกราฟ D3.js
+// ==========================================
+let currentSimulation;
+let linkElements;
+let linkLabelElements;
+let nodeElements;
+let labelElements;
 
-        // 5. วาดจุดบริษัท (Nodes)
-        const node = svgGroup.append("g")
-            .attr("class", "nodes")
-            .selectAll("circle")
-            .data(data.nodes)
-            .enter().append("circle")
-            .attr("class", "node")
-            .attr("r", 15)
-            .attr("fill", "#0079c1") // สีฟ้าสไตล์ ArcGIS
-            .call(d3.drag() // ทำให้ลากได้
-                .on("start", dragstarted)
-                .on("drag", dragged)
-                .on("end", dragended));
+const width = window.innerWidth;
+const height = window.innerHeight;
+const svg = d3.select("#viz").append("svg").attr("width", width).attr("height", height);
+const g = svg.append("g");
+const tooltip = d3.select("#tooltip");
 
-        // 6. ใส่ชื่อบริษัท (Labels)
-        const label = svgGroup.append("g")
-            .selectAll("text")
-            .data(data.nodes)
-            .enter().append("text")
-            .attr("class", "label")
-            .attr("dy", -20)
-            .attr("dx", -15)
-            .text(d => d.id);
+svg.call(d3.zoom().scaleExtent([0.1, 5]).on("zoom", e => g.attr("transform", e.transform)));
 
-        // 7. เพิ่ม Event ชี้แล้วแสดง Tooltip
-        node.on("mouseover", function(event, d) {
-            tooltip.transition().duration(200).style("opacity", .9);
-            tooltip.html("<b>" + d.id + "</b>")
-                .style("left", (event.pageX + 10) + "px")
-                .style("top", (event.pageY - 28) + "px");
-            d3.select(this).attr("fill", "#ffaa00"); // เปลี่ยนสีตอนชี้
-        }).on("mouseout", function(d) {
-            tooltip.transition().duration(500).style("opacity", 0);
-            d3.select(this).attr("fill", "#0079c1");
+let maxBudget = d3.max(graphData.nodes, d => d.total_budget_won);
+if(!maxBudget || maxBudget === 0) maxBudget = 1000000;
+const sizeScale = d3.scaleSqrt().domain([0, maxBudget]).range([8, 45]);
+
+let maxCompeted = d3.max(globalMergedLinks, d => d.total_competed);
+if(!maxCompeted || maxCompeted === 0) maxCompeted = 1;
+const linkScale = d3.scaleLinear().domain([1, maxCompeted]).range([1.5, 8]);
+
+const linkGroup = g.append("g");
+const linkLabelGroup = g.append("g");
+const nodeGroup = g.append("g");
+const labelGroup = g.append("g");
+
+function updateGraph(nData, lData) {
+    if(currentSimulation) currentSimulation.stop();
+
+    linkElements = linkGroup.selectAll("line")
+        .data(lData, d => {
+            const s = typeof d.source === 'object' ? d.source.id : d.source;
+            const t = typeof d.target === 'object' ? d.target.id : d.target;
+            return s + "-" + t;
+        })
+        .join("line")
+        .attr("stroke", "#475569")
+        .attr("stroke-opacity", 0.5)
+        .attr("stroke-width", d => linkScale(d.total_competed))
+        .on("mouseover", function(event, d) {
+            d3.select(this).attr("stroke", "#fcd34d").attr("stroke-opacity", 1);
+            
+            // สร้าง HTML สรุปผลแพ้ชนะใน Tooltip
+            let breakdownHtml = Object.entries(d.breakdown)
+                .map(([company, wins]) => `• <span style="color:#10b981">${company}</span> เป็นผู้ชนะ <b style="color:#fff">${wins}</b> ครั้ง`)
+                .join("<br>");
+
+            tooltip.style("opacity", 1)
+                .html(`<strong>ข้อมูลการแข่งขันร่วมกัน</strong>
+                แข่งขันกันทั้งหมด: <b style="color:#fcd34d; font-size:16px">${d.total_competed}</b> ครั้ง<br>
+                <div style="margin: 10px 0; padding: 10px; background: rgba(0,0,0,0.4); border-radius: 6px; border-left: 3px solid #38bdf8;">
+                    <div style="color:#38bdf8; font-size:12px; margin-bottom:5px;">สถิติการชนะระหว่าง 2 บริษัทนี้:</div>
+                    ${breakdownHtml}
+                </div>
+                พื้นที่ดำเนินการ: ${d.provinces_involved.join(", ")}<br>
+                หน่วยงานรับผิดชอบ: ${d.agencies_involved.join(", ")}`);
+        })
+        .on("mousemove", event => tooltip.style("left", (event.pageX + 20) + "px").style("top", (event.pageY - 30) + "px"))
+        .on("mouseout", function() {
+            d3.select(this).attr("stroke", "#475569").attr("stroke-opacity", 0.5);
+            tooltip.style("opacity", 0);
         });
 
-        // อัปเดตตำแหน่งทุก Frame
-        simulation.on("tick", () => {
-            link.attr("x1", d => d.source.x).attr("y1", d => d.source.y)
-                .attr("x2", d => d.target.x).attr("y2", d => d.target.y);
-            node.attr("cx", d => d.x).attr("cy", d => d.y);
-            label.attr("x", d => d.x).attr("y", d => d.y);
+    linkLabelElements = linkLabelGroup.selectAll("text")
+        .data(lData, d => {
+            const s = typeof d.source === 'object' ? d.source.id : d.source;
+            const t = typeof d.target === 'object' ? d.target.id : d.target;
+            return s + "-" + t;
+        })
+        .join("text")
+        .text(d => d.total_competed)
+        .attr("font-size", "14px")
+        .attr("font-weight", "bold")
+        .attr("fill", "#fcd34d")
+        .style("text-shadow", "1px 1px 2px #000, -1px -1px 2px #000, 1px -1px 2px #000, -1px 1px 2px #000")
+        .style("pointer-events", "none");
+
+    nodeElements = nodeGroup.selectAll("circle")
+        .data(nData, d => d.id)
+        .join("circle")
+        .attr("r", d => d.total_budget_won > 0 ? sizeScale(d.total_budget_won) : 6)
+        .attr("fill", d => d.type === "Winner" ? "#10b981" : "#e11d48")
+        .attr("stroke", "#0f111a")
+        .attr("stroke-width", 2)
+        .call(d3.drag()
+            .on("start", e => { if (!e.active) currentSimulation.alphaTarget(0.3).restart(); e.subject.fx = e.subject.x; e.subject.fy = e.subject.y; })
+            .on("drag", e => { e.subject.fx = e.x; e.subject.fy = e.y; })
+            .on("end", e => { if (!e.active) currentSimulation.alphaTarget(0); e.subject.fx = null; e.subject.fy = null; }))
+        .on("mouseover", function(event, d) {
+            d3.select(this).attr("stroke", "#fcd34d").attr("stroke-width", 4);
+            
+            linkElements.attr("stroke", l => {
+                const s = typeof l.source === 'object' ? l.source.id : l.source;
+                const t = typeof l.target === 'object' ? l.target.id : l.target;
+                return (s === d.id || t === d.id) ? "#fcd34d" : "#1e293b";
+            }).attr("stroke-opacity", l => {
+                const s = typeof l.source === 'object' ? l.source.id : l.source;
+                const t = typeof l.target === 'object' ? l.target.id : l.target;
+                return (s === d.id || t === d.id) ? 1 : 0.05;
+            });
+
+            linkLabelElements.attr("opacity", l => {
+                const s = typeof l.source === 'object' ? l.source.id : l.source;
+                const t = typeof l.target === 'object' ? l.target.id : l.target;
+                return (s === d.id || t === d.id) ? 1 : 0.05;
+            });
+
+            nodeElements.attr("opacity", n => {
+                if(n.id === d.id) return 1;
+                const isConnected = lData.some(l => {
+                    const s = typeof l.source === 'object' ? l.source.id : l.source;
+                    const t = typeof l.target === 'object' ? l.target.id : l.target;
+                    return (s === d.id && t === n.id) || (t === d.id && s === n.id);
+                });
+                return isConnected ? 1 : 0.15;
+            });
+
+            const typeBadge = d.type === "Winner" ? "<span class='badge badge-winner'>WINNER</span>" : "<span class='badge badge-cover'>คู่เทียบ</span>";
+            const budgetFormatted = d.total_budget_won > 0 ? d.total_budget_won.toLocaleString('th-TH') + " บาท" : "ไม่มีประวัติการชนะ";
+            
+            tooltip.style("opacity", 1)
+                .html(`<strong>${d.id}</strong>
+                ชนะประมูลทั้งหมด: ${d.total_projects_won} โครงการ<br>
+                เข้าร่วมยื่นซอง: ${d.total_bids_participated} ครั้ง<br>
+                มูลค่ารวมที่ชนะ: <span style="color:#fcd34d; font-weight:bold;">${budgetFormatted}</span><br>
+                หน่วยงานที่ผูกขาดหลัก: ${d.dominant_agency}`);
+        })
+        .on("mousemove", event => tooltip.style("left", (event.pageX + 20) + "px").style("top", (event.pageY - 30) + "px"))
+        .on("mouseout", function() {
+            d3.select(this).attr("stroke", "#0f111a").attr("stroke-width", 2);
+            linkElements.attr("stroke", "#475569").attr("stroke-opacity", 0.5);
+            linkLabelElements.attr("opacity", 1);
+            nodeElements.attr("opacity", 1);
+            tooltip.style("opacity", 0);
         });
 
-        // ฟังก์ชันลาก (Drag)
-        function dragstarted(event, d) {
-            if (!event.active) simulation.alphaTarget(0.3).restart();
-            d.fx = d.x; d.fy = d.y;
-        }
-        function dragged(event, d) {
-            d.fx = event.x; d.fy = event.y;
-        }
-        function dragended(event, d) {
-            if (!event.active) simulation.alphaTarget(0);
-            d.fx = null; d.fy = null;
-        }
-    </script>
+    labelElements = labelGroup.selectAll("text")
+        .data(nData.filter(d => d.type === "Winner" && d.total_budget_won > 500000000), d => d.id)
+        .join("text")
+        .text(d => d.id)
+        .attr("font-size", "14px")
+        .attr("font-weight", "bold")
+        .attr("fill", "#f8fafc")
+        .style("text-shadow", "2px 2px 4px #000, -2px -2px 4px #000, 2px -2px 4px #000, -2px 2px 4px #000")
+        .attr("dx", d => sizeScale(d.total_budget_won) + 8)
+        .attr("dy", 5)
+        .style("pointer-events", "none");
+
+    currentSimulation = d3.forceSimulation(nData)
+        .force("link", d3.forceLink(lData).id(d => d.id).distance(180))
+        .force("charge", d3.forceManyBody().strength(-350))
+        .force("center", d3.forceCenter(width / 2, height / 2))
+        .force("collide", d3.forceCollide().radius(d => sizeScale(d.total_budget_won) + 15));
+
+    currentSimulation.on("tick", () => {
+        linkElements.attr("x1", d => d.source.x).attr("y1", d => d.source.y)
+            .attr("x2", d => d.target.x).attr("y2", d => d.target.y);
+            
+        linkLabelElements.attr("x", d => (d.source.x + d.target.x) / 2)
+            .attr("y", d => ((d.source.y + d.target.y) / 2) - 8);
+            
+        nodeElements.attr("cx", d => d.x).attr("cy", d => d.y);
+        labelElements.attr("x", d => d.x).attr("y", d => d.y);
+    });
+}
+
+// โหลดกราฟครั้งแรกด้วยข้อมูลที่ยุบรวมแล้ว (globalMergedLinks)
+updateGraph(graphData.nodes, globalMergedLinks);
+
+const top5Winners = [...graphData.nodes]
+    .filter(d => d.type === "Winner")
+    .sort((a, b) => b.total_projects_won - a.total_projects_won)
+    .slice(0, 5)
+    .map(d => d.id);
+
+function applyFilter(targetIds) {
+    if(targetIds.length === 0) {
+        updateGraph(graphData.nodes, globalMergedLinks);
+        return;
+    }
+    const fLinks = globalMergedLinks.filter(l => {
+        const s = typeof l.source === 'object' ? l.source.id : l.source;
+        const t = typeof l.target === 'object' ? l.target.id : l.target;
+        return targetIds.includes(s) || targetIds.includes(t);
+    });
+    const validNodes = new Set(targetIds);
+    fLinks.forEach(l => {
+        validNodes.add(typeof l.source === 'object' ? l.source.id : l.source);
+        validNodes.add(typeof l.target === 'object' ? l.target.id : l.target);
+    });
+    const fNodes = graphData.nodes.filter(n => validNodes.has(n.id));
+    updateGraph(fNodes, fLinks);
+}
+
+document.getElementById('btnTop5').onclick = () => applyFilter(top5Winners);
+
+document.getElementById('btnSearch').onclick = () => {
+    const query = document.getElementById('searchInput').value.trim().toLowerCase();
+    if(!query) return applyFilter([]);
+    const matches = graphData.nodes.filter(n => n.id.toLowerCase().includes(query)).map(n => n.id);
+    if(matches.length > 0) applyFilter(matches);
+    else alert("ไม่พบชื่อบริษัทที่ค้นหา");
+};
+
+document.getElementById('btnReset').onclick = () => {
+    document.getElementById('searchInput').value = "";
+    applyFilter([]);
+};
+</script>
 </body>
 </html>
