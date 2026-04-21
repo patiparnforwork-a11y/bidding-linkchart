@@ -24,14 +24,25 @@ input[type="text"] { width: 100%; padding: 10px; background: #0f111a; border: 1p
 .btn-action:hover { background: #0284c7; }
 .btn-secondary { background: #475569; color: #f8fafc; }
 .btn-secondary:hover { background: #334155; }
+#searchFab { position: absolute; top: 20px; left: 20px; background: rgba(30, 41, 59, 0.9); border: 1px solid #334155; color: #f8fafc; width: 55px; height: 55px; border-radius: 50%; cursor: pointer; font-size: 24px; box-shadow: 0 10px 25px rgba(0,0,0,0.6); backdrop-filter: blur(10px); z-index: 101; display: none; transition: 0.3s; justify-content: center; align-items: center; }
+#searchFab:hover { background: #38bdf8; color: #0f111a; transform: scale(1.1); }
+.btn-close { background: transparent; border: none; color: #cbd5e1; font-size: 20px; cursor: pointer; padding: 0; transition: 0.2s; }
+.btn-close:hover { color: #e11d48; transform: scale(1.2); }
+.panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #334155; padding-bottom: 10px; }
+#panel h1 { margin: 0; font-size: 18px; border: none; padding: 0; }
 </style>
 </head>
 <body>
+<button id="searchFab" onclick="togglePanel(true)">🔍</button>
+
 <div id="panel">
+<div class="panel-header">
 <h1>ระบบวิเคราะห์เครือข่ายความสัมพันธ์</h1>
+<button class="btn-close" onclick="togglePanel(false)">✖</button>
+</div>
 <div class="legend-item"><div class="legend-color" style="background: #10b981;"></div> ผู้ชนะประมูล</div>
 <div class="legend-item"><div class="legend-color" style="background: #e11d48;"></div> ผู้เสนอราคาคู่เทียบ</div>
-<div class="legend-item"><div class="legend-color" style="background: #64748b; height: 3px; border-radius: 0;"></div> ความถี่ในการแข่งขัน (ความหนาของเส้น)</div>
+<div class="legend-item"><div class="legend-color" style="background: #64748b; height: 3px; border-radius: 0;"></div> ความถี่ในการแข่งขัน</div>
 <div class="control-group">
 <input type="text" id="searchInput" placeholder="พิมพ์ชื่อบริษัทเพื่อค้นหา...">
 <button id="btnSearch" class="btn-action">ค้นหา</button>
@@ -4958,6 +4969,36 @@ document.getElementById('btnSearch').onclick = () => {
     const matches = graphData.nodes.filter(n => n.id.toLowerCase().includes(query)).map(n => n.id);
     if(matches.length > 0) applyFilter(matches);
     else alert("ไม่พบชื่อบริษัทที่ค้นหา");
+};
+
+document.getElementById('btnReset').onclick = () => {
+    document.getElementById('searchInput').value = "";
+    applyFilter([]);
+};
+
+function togglePanel(show) {
+    document.getElementById('panel').style.display = show ? 'block' : 'none';
+    document.getElementById('searchFab').style.display = show ? 'none' : 'flex';
+}
+
+document.getElementById('btnTop5').onclick = () => {
+    applyFilter(top5Winners);
+    togglePanel(false);
+};
+
+document.getElementById('btnSearch').onclick = () => {
+    const query = document.getElementById('searchInput').value.trim().toLowerCase();
+    if(!query) {
+        applyFilter([]);
+        return;
+    }
+    const matches = graphData.nodes.filter(n => n.id.toLowerCase().includes(query)).map(n => n.id);
+    if(matches.length > 0) {
+        applyFilter(matches);
+        togglePanel(false);
+    } else {
+        alert("ไม่พบชื่อบริษัทที่ค้นหา");
+    }
 };
 
 document.getElementById('btnReset').onclick = () => {
