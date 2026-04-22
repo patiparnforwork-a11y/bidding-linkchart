@@ -5005,6 +5005,36 @@ document.getElementById('btnReset').onclick = () => {
     document.getElementById('searchInput').value = "";
     applyFilter([]);
 };
+
+// ==========================================
+// 3. ระบบรับค่าจาก URL Parameter ของ ArcGIS Dashboard
+// ==========================================
+// ใช้ setTimeout หน่วงเวลาเล็กน้อย (0.5 วินาที) ให้กราฟหลักวาดเสร็จก่อน ค่อยทำการกรอง
+setTimeout(() => {
+    // 1. ดึงค่าพารามิเตอร์ที่ชื่อว่า 'company' จาก URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const companyNameFromArcGIS = urlParams.get('company');
+
+    // ถ้ามีค่าส่งมา (มีการกดจาก Dashboard)
+    if (companyNameFromArcGIS) {
+        
+        // 2. เอาชื่อบริษัทไปใส่ไว้ในช่อง Input (เพื่อให้ผู้ใช้เห็นแบบในรูป)
+        document.getElementById('searchInput').value = companyNameFromArcGIS;
+
+        // 3. สั่งค้นหาและกรองข้อมูลทันที
+        const query = companyNameFromArcGIS.trim().toLowerCase();
+        const matches = graphData.nodes
+            .filter(n => n.id.toLowerCase().includes(query))
+            .map(n => n.id);
+
+        if (matches.length > 0) {
+            applyFilter(matches); // กรองกราฟ
+            togglePanel(false);   // พับหน้าต่างค้นหาเก็บ เพื่อให้เห็นกราฟเต็มๆ
+        } else {
+            console.log("ไม่พบข้อมูลของบริษัท: " + companyNameFromArcGIS);
+        }
+    }
+}, 500);
 </script>
 </body>
 </html>
